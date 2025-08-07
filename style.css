@@ -1,0 +1,164 @@
+/*
+ * Styling for the Mr. Teals frontend.
+ *
+ * The aesthetic combines a warm teal accent with a dark, slightly textured
+ * background. Panels are semi-transparent with a blur effect to give
+ * depth, and controls are clearly delineated. Feel free to enhance
+ * animations and transitions further to suit your own tastes.
+ */
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: linear-gradient(to bottom right, #0b3d4a, #012d3a);
+  color: #f0f0f0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+}
+
+.logo {
+  width: 50px;
+  height: 50px;
+  margin-right: 0.75rem;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
+}
+
+.controls button {
+  margin-left: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #008080;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.3s ease;
+}
+
+.controls button:hover {
+  background: #00a0a0;
+}
+
+main {
+  flex: 1;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-gap: 1rem;
+  align-items: flex-start;
+}
+
+.panel {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  min-height: 150px;
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+#watchlist-section {
+  grid-column: 1 / -1;
+}
+
+#watchlist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+}
+
+#watchlist li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+#watchlist li:last-child {
+  border-bottom: none;
+}
+
+#watchlist li span.symbol {
+  flex-grow: 1;
+  font-weight: bold;
+  color: #00cccc;
+}
+
+#watchlist li span.price {
+  margin-right: 1rem;
+}
+
+#watchlist li button {
+  padding: 0.25rem 0.5rem;
+  background: #aa0000;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.2s ease;
+}
+
+#watchlist li button:hover {
+  background: #cc2222;
+}
+
+.watchlist-input {
+  display: flex;
+  align-items: center;
+}
+
+.watchlist-input input {
+  flex-grow: 1;
+  padding: 0.5rem;
+  margin-right: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+
+.watchlist-input button {
+  padding: 0.5rem 1rem;
+  background: #006666;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.watchlist-input button:hover {
+  background: #008888;
+}
+
+footer {
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+}
