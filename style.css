@@ -210,3 +210,66 @@ footer {
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.5);
 }
+
+/* Modal overlay for crypto details */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+/* Modal content container */
+.modal-content {
+  background: rgba(0, 20, 20, 0.9);
+  margin: 5% auto;
+  padding: 1rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 800px;
+  color: #f0f0f0;
+}
+
+.modal-content h2 {
+  margin-top: 0;
+}
+
+/* Close button for modal */
+.close {
+  float: right;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+
+/* Chart inside crypto modal */
+#crypto-chart {
+  width: 100%;
+  height: 300px;
+}
+
+/* Info section inside modal */
+#crypto-info {
+  margin-top: 1rem;
+}
+
+/* Timeframe buttons for crypto chart */
+#crypto-timeframes button {
+  margin: 0.5rem 0.5rem 0 0;
+  padding: 0.25rem 0.5rem;
+  background: #006666;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+/* Active timeframe button */
+#crypto-timeframes button.active {
+  background: #00cccc;
+}

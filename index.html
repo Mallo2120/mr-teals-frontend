@@ -26,25 +26,25 @@
       <section id="dashboard">
         <div class="panel" id="performance">
           <h2>Performance Today</h2>
-          <p>Realized PnL: <span id="realized-pnl">0</span></p>
-          <p>Unrealized PnL: <span id="unrealized-pnl">0</span></p>
-          <p>Trades Today: <span id="trades-count">0</span></p>
+          <p>Realized PnL: <span id="realized-pnl" title="Total profit or loss from closed positions today">0</span></p>
+          <p>Unrealized PnL: <span id="unrealized-pnl" title="Current profit or loss from open positions">0</span></p>
+          <p>Trades Today: <span id="trades-count" title="Number of trades executed today">0</span></p>
         </div>
         <div class="panel" id="last-trade">
           <h2>Last Trade</h2>
-          <p>Symbol: <span id="last-symbol">N/A</span></p>
-          <p>Side: <span id="last-side">N/A</span></p>
-          <p>Qty: <span id="last-qty">N/A</span></p>
-          <p>Price: <span id="last-price">N/A</span></p>
-          <p>Time: <span id="last-time">N/A</span></p>
-          <p>Strategy: <span id="last-strategy">N/A</span></p>
+          <p>Symbol: <span id="last-symbol" title="Ticker symbol of the last traded cryptocurrency">N/A</span></p>
+          <p>Side: <span id="last-side" title="Whether the last trade was a buy or sell">N/A</span></p>
+          <p>Qty: <span id="last-qty" title="Quantity involved in the last trade">N/A</span></p>
+          <p>Price: <span id="last-price" title="Execution price of the last trade">N/A</span></p>
+          <p>Time: <span id="last-time" title="Time when the last trade occurred">N/A</span></p>
+          <p>Strategy: <span id="last-strategy" title="Trading strategy used for the last trade">N/A</span></p>
         </div>
         <div class="panel" id="account">
           <h2>Account Snapshot</h2>
-          <p>Equity: <span id="equity">0</span></p>
-          <p>Cash: <span id="cash">0</span></p>
-          <p>Positions Value: <span id="positions-value">0</span></p>
-          <p>Unrealized PnL: <span id="account-unrealized-pnl">0</span></p>
+          <p>Equity: <span id="equity" title="Total account value (cash + positions value)">0</span></p>
+          <p>Cash: <span id="cash" title="Available cash in your account">0</span></p>
+          <p>Positions Value: <span id="positions-value" title="Combined value of your open positions">0</span></p>
+          <p>Unrealized PnL: <span id="account-unrealized-pnl" title="Current profit or loss from open positions">0</span></p>
         </div>
       </section>
       <!-- Trading Settings panel -->
@@ -52,21 +52,25 @@
         <h2>Trading Settings</h2>
         <div class="settings-field">
           <label for="initial-balance">Initial Balance ($)</label>
-          <input type="number" id="initial-balance" placeholder="10000" min="0" step="100" />
+          <input type="number" id="initial-balance" placeholder="10000" min="0" step="100"
+                 title="Initial amount to start trading with (in dollars). Adjust your starting capital here." />
         </div>
         <div class="settings-field">
           <label for="position-size">Position Size (% of equity)</label>
-          <input type="number" id="position-size" min="1" max="100" value="10" />
+          <input type="number" id="position-size" min="1" max="100" value="10"
+                 title="Percentage of your current equity to allocate to each trade." />
         </div>
         <div class="settings-field">
           <label for="stop-loss">Stop Loss (%)</label>
-          <input type="number" id="stop-loss" min="1" max="100" value="3" />
+          <input type="number" id="stop-loss" min="1" max="100" value="3"
+                 title="Maximum percentage price decline before a position is automatically closed." />
         </div>
         <div class="settings-field">
           <label for="max-daily-loss">Max Daily Loss (%)</label>
-          <input type="number" id="max-daily-loss" min="1" max="100" value="5" />
+          <input type="number" id="max-daily-loss" min="1" max="100" value="5"
+                 title="Maximum percentage of your account equity you are willing to lose in a single day before the bot pauses." />
         </div>
-        <button id="save-settings-btn">Save Settings</button>
+        <button id="save-settings-btn" title="Save and apply these risk settings to your trading bot.">Save Settings</button>
       </section>
 
       <!-- Watchlist panel -->
@@ -84,6 +88,23 @@
         <h2>Equity Over Time</h2>
         <canvas id="pnl-chart"></canvas>
       </section>
+
+      <!-- Crypto Details Modal -->
+      <div id="crypto-modal" class="modal">
+        <div class="modal-content">
+          <span id="crypto-close-btn" class="close">&times;</span>
+          <h2 id="crypto-title">Crypto Details</h2>
+          <canvas id="crypto-chart"></canvas>
+          <div id="crypto-info"></div>
+          <div id="crypto-timeframes">
+            <button data-range="1">1D</button>
+            <button data-range="7">7D</button>
+            <button data-range="30">1M</button>
+            <button data-range="365">1Y</button>
+            <button data-range="1825">5Y</button>
+          </div>
+        </div>
+      </div>
     </main>
     <footer>
       <p>Powered by Mr. Teals Bot</p>
