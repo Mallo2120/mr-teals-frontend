@@ -120,7 +120,8 @@
         </label>
         <label title="Quantity of the base asset (e.g., 0.01 BTC)">
           Quantity
-          <input id="manualQty" type="number" step="0.0001" min="0.00000001" placeholder="0.01" />
+          <!-- allow any positive numeric quantity. using step='any' prevents HTML5 from rejecting valid integers like 1 -->
+          <input id="manualQty" type="number" step="any" min="0" placeholder="0.01" />
         </label>
         <button class="btn" type="submit">Execute</button>
       </form>

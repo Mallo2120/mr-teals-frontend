@@ -269,7 +269,7 @@ el.btnReset.addEventListener("click", async () => {
 function updateManualEstimate() {
   clearTimeout(estimateTimer);
   estimateTimer = setTimeout(async () => {
-    const symbol = (el.manualSymbol.value || "").trim();
+    const symbol = (el.manualSymbol.value || "").trim().toUpperCase();
     const qty = Number(el.manualQty.value);
     const output = document.getElementById("manualEst");
     if (!symbol || !qty || qty <= 0) {
@@ -298,7 +298,7 @@ el.manualQty.addEventListener("input", updateManualEstimate);
 
 el.manualTradeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-  const symbol = (el.manualSymbol.value || "").trim();
+  const symbol = (el.manualSymbol.value || "").trim().toUpperCase();
   const side = el.manualSide.value;
   const qty = Number(el.manualQty.value);
   if (!symbol || !qty || qty <= 0) {
