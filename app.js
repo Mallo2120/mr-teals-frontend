@@ -127,6 +127,9 @@
     'DOGEUSD': 'dogecoin',
     'ADA/USD': 'cardano',
     'ADAUSD': 'cardano',
+    'DOT': 'polkadot',
+    'DOT/USD': 'polkadot',
+    'DOTUSD': 'polkadot',
   };
 
   /**

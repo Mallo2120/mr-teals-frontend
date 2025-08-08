@@ -233,6 +233,9 @@ footer {
   width: 90%;
   max-width: 800px;
   color: #f0f0f0;
+  /* Constrain modal height and allow internal scrolling so the page scroll bar isn't overwhelmed */
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 .modal-content h2 {
@@ -250,6 +253,7 @@ footer {
 #crypto-chart {
   width: 100%;
   height: 300px;
+  max-height: 300px;
 }
 
 /* Info section inside modal */
@@ -272,4 +276,178 @@ footer {
 /* Active timeframe button */
 #crypto-timeframes button.active {
   background: #00cccc;
+}
+
+/* ===============================
+   New generic dashboard styling
+   =============================== */
+
+/* Navbar at the top */
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Brand (logo and name) */
+.brand {
+  display: flex;
+  align-items: center;
+}
+.brand img {
+  width: 40px;
+  height: 40px;
+  margin-right: 0.75rem;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+}
+.brand span {
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+/* Header control buttons */
+.actions button {
+  margin-left: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #008080;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.3s ease;
+}
+.actions button:hover {
+  background: #00a0a0;
+}
+
+/* Card grid layout */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+/* Card container */
+.card {
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+.card h2 {
+  margin-top: 0;
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Settings fields (inside settings card) */
+.card .settings-field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.5rem;
+}
+.card .settings-field label {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+  color: #aacccc;
+}
+.card .settings-field input {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+#save-settings-btn {
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #004444;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.3s ease;
+}
+#save-settings-btn:hover {
+  background: #006666;
+}
+
+/* Watchlist styles inside card */
+#watchlist {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem 0;
+}
+#watchlist li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+#watchlist li:last-child {
+  border-bottom: none;
+}
+#watchlist li span.symbol {
+  flex-grow: 1;
+  font-weight: bold;
+  color: #00cccc;
+}
+#watchlist li span.price {
+  margin-right: 1rem;
+}
+#watchlist li button {
+  padding: 0.25rem 0.5rem;
+  background: #aa0000;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.2s ease;
+}
+#watchlist li button:hover {
+  background: #cc2222;
+}
+.watchlist-input {
+  display: flex;
+  align-items: center;
+}
+.watchlist-input input {
+  flex-grow: 1;
+  padding: 0.5rem;
+  margin-right: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.9rem;
+}
+.watchlist-input button {
+  padding: 0.5rem 1rem;
+  background: #006666;
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+.watchlist-input button:hover {
+  background: #008888;
+}
+
+/* Equity chart sizing inside card */
+#equity-chart-card canvas {
+  width: 100%;
+  height: 250px;
 }
