@@ -1,8 +1,8 @@
 /*
- * Styling for the Mr. Teals frontend.
+ * Styling for the Mr. Teals frontend.
  *
  * The aesthetic combines a warm teal accent with a dark, slightly textured
- * background. Panels are semi-transparent with a blur effect to give
+ * background. Panels are semi‑transparent with a blur effect to give
  * depth, and controls are clearly delineated. Feel free to enhance
  * animations and transitions further to suit your own tastes.
  */
@@ -84,6 +84,54 @@ main {
 #watchlist-section {
   grid-column: 1 / -1;
 }
+
+    /* Settings panel fields */
+    .settings-field {
+      display: flex;
+      flex-direction: column;
+      margin-bottom: 0.5rem;
+    }
+
+    .settings-field label {
+      margin-bottom: 0.25rem;
+      font-size: 0.9rem;
+      color: #aacccc;
+    }
+
+    .settings-field input {
+      padding: 0.5rem;
+      border: none;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+
+    #save-settings-btn {
+      margin-top: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: #004444;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.3s ease;
+    }
+
+    #save-settings-btn:hover {
+      background: #006666;
+    }
+
+    /* Chart panel styles */
+    #chart-section {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    #chart-section canvas {
+      width: 100%;
+      height: 300px;
+    }
 
 #watchlist {
   list-style: none;
