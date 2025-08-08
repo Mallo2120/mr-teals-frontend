@@ -221,6 +221,25 @@ body {
   color: var(--negative);
 }
 
+/* Manual trade card styles */
+.manual-trade-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.manual-trade-card select,
+.manual-trade-card input {
+  background: #0c1a20;
+  border: 1px solid var(--border-color);
+  padding: 0.4rem;
+  border-radius: var(--border-radius);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+}
+.manual-trade-btn {
+  align-self: flex-start;
+}
+
 /* Custom tooltip */
 .custom-tooltip {
   position: absolute;

@@ -21,6 +21,7 @@
       <button id="btnStart" class="control-btn">Start</button>
       <button id="btnPause" class="control-btn">Pause</button>
       <button id="btnKill" class="control-btn">Kill</button>
+      <button id="btnReset" class="control-btn">Reset</button>
       <button id="themeToggle" class="control-btn">Light</button>
     </div>
   </nav>
@@ -113,6 +114,27 @@
           <ul id="tradeLog" class="trade-log-list"></ul>
           <div id="tradeEmpty" class="empty-state">No trades yet</div>
         </div>
+      </div>
+
+      <!-- Manual Trade -->
+      <div class="card manual-trade-card">
+        <div class="card-title">Manual Trade</div>
+        <form id="manualTradeForm">
+          <label for="tradeSymbol">Symbol</label>
+          <select id="tradeSymbol">
+            <option value="BTC/USD">BTC/USD</option>
+            <option value="ETH/USD">ETH/USD</option>
+            <option value="SOL/USD">SOL/USD</option>
+          </select>
+          <label for="tradeSide">Side</label>
+          <select id="tradeSide">
+            <option value="BUY">Buy</option>
+            <option value="SELL">Sell</option>
+          </select>
+          <label for="tradeQty">Quantity</label>
+          <input id="tradeQty" type="number" min="0" step="0.001" placeholder="0.1" />
+          <button type="submit" class="save-btn manual-trade-btn">Execute Trade</button>
+        </form>
       </div>
     </div>
   </div>

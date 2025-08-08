@@ -38,10 +38,16 @@ const el = {
   btnStart: document.getElementById('btnStart'),
   btnPause: document.getElementById('btnPause'),
   btnKill: document.getElementById('btnKill'),
+  btnReset: document.getElementById('btnReset'),
   themeToggle: document.getElementById('themeToggle'),
   addSymbolInput: document.getElementById('addSymbolInput'),
   addSymbolButton: document.getElementById('addSymbolButton')
   , tradeLog: document.getElementById('tradeLog')
+  , tradeEmpty: document.getElementById('tradeEmpty')
+  , manualTradeForm: document.getElementById('manualTradeForm'),
+  tradeSymbol: document.getElementById('tradeSymbol'),
+  tradeSide: document.getElementById('tradeSide'),
+  tradeQty: document.getElementById('tradeQty')
 };
 
 // Timer for periodic updates when bot is running
@@ -71,15 +77,15 @@ let simInitialBalance = 10000;
  * it is cleared before scheduling a new one.
  */
 function startSimulation() {
-  // Reset simulation state based on current settings
-  initSimulation();
+  // If the simulation is already running, do nothing.
+  if(simRunning) return;
   simRunning = true;
   // Clear any existing interval
   if(simInterval) {
     clearInterval(simInterval);
     simInterval = null;
   }
-  // Run one step immediately to prime the UI, then continue every 5 seconds
+  // Prime with one step and schedule periodic updates
   simulateStep();
   simInterval = setInterval(() => {
     if(simRunning) {
@@ -99,6 +105,81 @@ function stopSimulation() {
     clearInterval(simInterval);
     simInterval = null;
   }
+}
+
+/**
+ * Reset the simulation state to initial conditions without starting it.
+ * This stops any running simulation and clears positions, cash, PnL and
+ * trade history. It also reinitialises the watchlist prices.
+ */
+function resetSimulation() {
+  stopSimulation();
+  initSimulation();
+}
+
+/**
+ * Execute a manual trade in the simulation. Allows the user to buy or sell
+ * a specific quantity of a symbol. Updates cash, positions, realized PnL
+ * and trade log accordingly. If the simulator is not running, it will
+ * still execute the trade based on the current watchlist price.
+ * @param {string} symbol
+ * @param {string} side 'BUY' or 'SELL'
+ * @param {number} qty  quantity of the asset to trade
+ */
+function executeManualTrade(symbol, side, qty) {
+  if(!symbol || !qty || qty <= 0) return;
+  // Find current price; fallback to 0 if unknown
+  const currentPrice = (simWatchlist.find(item => item.symbol === symbol)?.price) || 0;
+  if(currentPrice <= 0) {
+    toast('Unknown price; cannot trade', 'warn', 2200);
+    return;
+  }
+  const tradeValue = qty * currentPrice;
+  if(side === 'BUY') {
+    if(tradeValue > simCash) {
+      toast('Insufficient cash for trade', 'warn', 2500);
+      return;
+    }
+    simCash -= tradeValue;
+    if(simPositions[symbol]) {
+      const pos = simPositions[symbol];
+      const totalCost = pos.qty * pos.avgCost + tradeValue;
+      pos.qty += qty;
+      pos.avgCost = totalCost / pos.qty;
+    } else {
+      simPositions[symbol] = { qty, avgCost: currentPrice };
+    }
+    simTradeLog.push({ time: new Date().toISOString().slice(0,19).replace('T',' '), symbol, side:'BUY', qty: qty.toFixed(3), price: currentPrice.toFixed(2) });
+  } else if(side === 'SELL') {
+    const pos = simPositions[symbol];
+    if(!pos || pos.qty < qty) {
+      toast('Not enough position to sell', 'warn', 2400);
+      return;
+    }
+    simCash += tradeValue;
+    simRealizedPnl += qty * (currentPrice - pos.avgCost);
+    pos.qty -= qty;
+    if(pos.qty <= 0) {
+      delete simPositions[symbol];
+    }
+    simTradeLog.push({ time: new Date().toISOString().slice(0,19).replace('T',' '), symbol, side:'SELL', qty: qty.toFixed(3), price: currentPrice.toFixed(2) });
+  }
+  // Update positions value and PnL
+  simUnrealizedPnl = 0;
+  let positionsValue = 0;
+  Object.keys(simPositions).forEach(sym => {
+    const pos = simPositions[sym];
+    const price = (simWatchlist.find(item => item.symbol === sym)?.price) || pos.avgCost;
+    positionsValue += pos.qty * price;
+    simUnrealizedPnl += pos.qty * (price - pos.avgCost);
+  });
+  const equity = simCash + positionsValue;
+  simEquityHistory.push({ x: new Date(), y: equity });
+  // Refresh UI
+  applyPerformance({ realized: simRealizedPnl, unrealized: simUnrealizedPnl, trades: simTradeLog.length });
+  applySnapshot({ equity, cash: simCash, positions: positionsValue });
+  renderTradeLog(simTradeLog);
+  buildEquityChart(simEquityHistory);
 }
 
 /**
@@ -137,12 +218,24 @@ function initSimulation() {
 /**
  * Perform one simulation step: update prices, maybe execute a trade, update PnL and UI.
  */
-function simulateStep() {
-  // Update watchlist prices with random drift
+async function simulateStep() {
+  // Attempt to fetch live prices from Coingecko; if that fails, use random drift
+  let livePrices = null;
+  try {
+    livePrices = await fetchLivePrices(simWatchlist.map(i => i.symbol));
+  } catch {}
   simWatchlist.forEach(item => {
-    const drift = (Math.random() - 0.5) * 0.01 * item.price; // ±1% drift
-    item.price += drift;
-    item.changePct = (drift / item.price) * 100;
+    if(livePrices && livePrices[item.symbol] != null) {
+      const oldPrice = item.price;
+      item.price = livePrices[item.symbol];
+      const change = item.price - oldPrice;
+      item.changePct = (change / oldPrice) * 100;
+    } else {
+      // Fallback: random drift if no live price available
+      const drift = (Math.random() - 0.5) * 0.01 * item.price;
+      item.price += drift;
+      item.changePct = (drift / item.price) * 100;
+    }
   });
   // Possibly execute a trade (50% chance)
   if(Math.random() < 0.5) {
@@ -208,14 +301,23 @@ function simulateStep() {
 function startUpdates() {
   stopUpdates();
   updateTimer = setInterval(() => {
-    loadPerformance();
-    loadSnapshot();
-    // Determine currently active range chip for equity
-    const activeChip = document.querySelector('.range-chips .chip.active');
-    const range = activeChip ? activeChip.dataset.range : '1M';
-    loadEquity(range);
-    loadWatchlist();
-    loadTradeLog();
+    // When simulation is running, backend polling is unnecessary. The
+    // simulation itself updates the UI via simulateStep(). Only update the
+    // watchlist and trade log using simulation data.
+    if(simRunning) {
+      // Render simulated watchlist and trade log directly
+      renderWatchlist(simWatchlist);
+      renderTradeLog(simTradeLog);
+    } else {
+      // Otherwise poll the backend for updates
+      loadPerformance();
+      loadSnapshot();
+      const activeChip = document.querySelector('.range-chips .chip.active');
+      const range = activeChip ? activeChip.dataset.range : '1M';
+      loadEquity(range);
+      loadWatchlist();
+      loadTradeLog();
+    }
   }, 5000);
 }
 
@@ -284,6 +386,47 @@ function fmtPct(p) {
 }
 function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
+}
+
+/* --------------------------------------------------------------------------
+   Live Price Fetching (Coingecko API)
+--------------------------------------------------------------------------- */
+// Map our symbol format to Coingecko coin IDs. Extend this as you add more
+// symbols to your watchlist. For unsupported symbols the fetch will fall back
+// to random drift.
+const COINGECKO_IDS = {
+  'BTC/USD': 'bitcoin',
+  'ETH/USD': 'ethereum',
+  'SOL/USD': 'solana',
+  'DOT/USD': 'polkadot',
+  'DOGE/USD': 'dogecoin'
+};
+
+async function fetchLivePrices(symbols) {
+  // Construct a list of IDs to fetch
+  const ids = symbols.map(sym => COINGECKO_IDS[sym] || '').filter(Boolean);
+  if(ids.length === 0) {
+    return null;
+  }
+  const uniqueIds = Array.from(new Set(ids)).join(',');
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${uniqueIds}&vs_currencies=usd`;
+  try {
+    const res = await withTimeout(fetch(url), REQUEST_TIMEOUT_MS);
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    // Map back to symbol->price objects
+    const result = {};
+    symbols.forEach(sym => {
+      const id = COINGECKO_IDS[sym];
+      if(id && json[id] && json[id].usd != null) {
+        result[sym] = json[id].usd;
+      }
+    });
+    return result;
+  } catch(err) {
+    console.warn('Live price fetch failed:', err.message);
+    return null;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -555,6 +698,17 @@ function renderWatchlist(items) {
     });
     el.watchlist.appendChild(li);
   });
+  // Update manual trade symbol options to include current watchlist symbols
+  if(el.tradeSymbol) {
+    // Clear existing options
+    el.tradeSymbol.innerHTML = '';
+    items.forEach(item => {
+      const opt = document.createElement('option');
+      opt.value = item.symbol;
+      opt.textContent = item.symbol;
+      el.tradeSymbol.appendChild(opt);
+    });
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -785,6 +939,14 @@ el.btnStart.addEventListener('click', () => sendControl('start'));
 el.btnPause.addEventListener('click', () => sendControl('pause'));
 el.btnKill.addEventListener('click', () => sendControl('kill'));
 
+// Reset button: clears state without starting new simulation
+if(el.btnReset) {
+  el.btnReset.addEventListener('click', () => {
+    resetSimulation();
+    toast('Simulator reset', 'info', 1800);
+  });
+}
+
 /* --------------------------------------------------------------------------
    Add Symbol to Watchlist
 --------------------------------------------------------------------------- */
@@ -848,4 +1010,16 @@ document.addEventListener('DOMContentLoaded', () => {
       tooltipEl.style.display = 'none';
     });
   });
+  // Manual trade form handler
+  if(el.manualTradeForm) {
+    el.manualTradeForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const sym = el.tradeSymbol.value;
+      const side = el.tradeSide.value;
+      const qty = parseFloat(el.tradeQty.value);
+      executeManualTrade(sym, side, qty);
+      // Clear quantity input
+      el.tradeQty.value = '';
+    });
+  }
 });
