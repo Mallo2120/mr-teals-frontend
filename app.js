@@ -47,6 +47,160 @@ const el = {
 // Timer for periodic updates when bot is running
 let updateTimer = null;
 
+// Timer for simulation when the bot is running. This drives price updates,
+// PnL calculations and trade log generation locally. When `simInterval` is
+// active, the UI will update every few seconds to reflect simulated activity.
+let simInterval = null;
+
+// Simulation state
+let simRunning = false;
+let simPositions = {};
+let simWatchlist = [];
+let simCash = 10000;
+let simRealizedPnl = 0;
+let simUnrealizedPnl = 0;
+let simEquityHistory = [];
+let simTradeLog = [];
+let simInitialBalance = 10000;
+
+/**
+ * Start the local simulation loop. This sets the running flag, resets the
+ * simulation state using current settings and watchlist, then schedules
+ * repeated calls to `simulateStep()`. Each step will update prices, PnL,
+ * trade log and refresh the UI. If a previous simulation loop was running
+ * it is cleared before scheduling a new one.
+ */
+function startSimulation() {
+  // Reset simulation state based on current settings
+  initSimulation();
+  simRunning = true;
+  // Clear any existing interval
+  if(simInterval) {
+    clearInterval(simInterval);
+    simInterval = null;
+  }
+  // Run one step immediately to prime the UI, then continue every 5 seconds
+  simulateStep();
+  simInterval = setInterval(() => {
+    if(simRunning) {
+      simulateStep();
+    }
+  }, 5000);
+}
+
+/**
+ * Stop the local simulation loop. This clears the interval and marks the
+ * simulation as not running. The current state is preserved so that
+ * equity, positions and trade logs remain visible until the next start.
+ */
+function stopSimulation() {
+  simRunning = false;
+  if(simInterval) {
+    clearInterval(simInterval);
+    simInterval = null;
+  }
+}
+
+/**
+ * Initialize simulation state based on current settings and watchlist.
+ */
+function initSimulation() {
+  const payload = getSettingsPayload();
+  simInitialBalance = payload.initialBalance;
+  simCash = simInitialBalance;
+  simPositions = {};
+  simRealizedPnl = 0;
+  simUnrealizedPnl = 0;
+  simEquityHistory = [];
+  simTradeLog = [];
+  // Initialize watchlist prices from existing list or fallback
+  if(el.watchlist.children.length > 0) {
+    simWatchlist = Array.from(el.watchlist.children).map(li => {
+      const spans = li.querySelectorAll('span');
+      const symbol = spans[0].textContent.trim();
+      const priceText = spans[1].textContent.replace(/[$,]/g, '');
+      const price = parseFloat(priceText) || 100; // default fallback
+      return { symbol, price, changePct: 0 };
+    });
+  } else {
+    simWatchlist = fakeWatchlist().map(item => ({ symbol: item.symbol, price: item.price, changePct: item.changePct }));
+  }
+  // Reset equity chart to flat line at initial balance
+  simEquityHistory.push({ x: new Date(), y: simInitialBalance });
+  buildEquityChart(simEquityHistory);
+  // Update UI snapshot
+  applySnapshot({ equity: simInitialBalance, cash: simCash, positions: 0 });
+  applyPerformance({ realized: 0, unrealized: 0, trades: 0 });
+  renderTradeLog(simTradeLog);
+}
+
+/**
+ * Perform one simulation step: update prices, maybe execute a trade, update PnL and UI.
+ */
+function simulateStep() {
+  // Update watchlist prices with random drift
+  simWatchlist.forEach(item => {
+    const drift = (Math.random() - 0.5) * 0.01 * item.price; // ±1% drift
+    item.price += drift;
+    item.changePct = (drift / item.price) * 100;
+  });
+  // Possibly execute a trade (50% chance)
+  if(Math.random() < 0.5) {
+    const idx = Math.floor(Math.random() * simWatchlist.length);
+    const symObj = simWatchlist[idx];
+    const symbol = symObj.symbol;
+    const price = symObj.price;
+    const side = Math.random() < 0.5 ? 'BUY' : 'SELL';
+    const settings = getSettingsPayload();
+    const posPct = settings.positionSizePct / 100;
+    const qtyValue = simCash * posPct;
+    if(side === 'BUY' && qtyValue > 0) {
+      const qty = qtyValue / price;
+      simCash -= qty * price;
+      // Update positions
+      if(simPositions[symbol]) {
+        const pos = simPositions[symbol];
+        const totalCost = pos.qty * pos.avgCost + qty * price;
+        pos.qty += qty;
+        pos.avgCost = totalCost / pos.qty;
+      } else {
+        simPositions[symbol] = { qty, avgCost: price };
+      }
+      simTradeLog.push({ time: new Date().toISOString().slice(0,19).replace('T',' '), symbol, side:'BUY', qty: qty.toFixed(3), price: price.toFixed(2) });
+    } else if(side === 'SELL') {
+      const pos = simPositions[symbol];
+      if(pos && pos.qty > 0) {
+        const qty = pos.qty;
+        simCash += qty * price;
+        simRealizedPnl += qty * (price - pos.avgCost);
+        simTradeLog.push({ time: new Date().toISOString().slice(0,19).replace('T',' '), symbol, side:'SELL', qty: qty.toFixed(3), price: price.toFixed(2) });
+        delete simPositions[symbol];
+      }
+    }
+  }
+  // Update unrealized PnL and positions value
+  simUnrealizedPnl = 0;
+  let positionsValue = 0;
+  Object.keys(simPositions).forEach(sym => {
+    const pos = simPositions[sym];
+    const currentPrice = simWatchlist.find(item => item.symbol === sym)?.price || pos.avgCost;
+    positionsValue += pos.qty * currentPrice;
+    simUnrealizedPnl += pos.qty * (currentPrice - pos.avgCost);
+  });
+  const equity = simCash + positionsValue;
+  simEquityHistory.push({ x: new Date(), y: equity });
+  // Limit equity history for 5m range to last 60 points
+  if(simEquityHistory.length > 60) {
+    simEquityHistory.shift();
+  }
+  // Apply UI updates
+  applyPerformance({ realized: simRealizedPnl, unrealized: simUnrealizedPnl, trades: simTradeLog.length });
+  applySnapshot({ equity, cash: simCash, positions: positionsValue });
+  renderTradeLog(simTradeLog);
+  renderWatchlist(simWatchlist);
+  buildEquityChart(simEquityHistory);
+}
+
 /**
  * Start periodic updates of performance, snapshot, equity and watchlist.
  * This runs every 5 seconds until stopped.
@@ -326,6 +480,21 @@ function applySnapshot({ equity, cash, positions }) {
   el.snapPositions.textContent = fmtUSD(positions);
 }
 async function loadEquity(range='1M') {
+  // When simulation is running, display the simulated equity series instead of
+  // fetching from the backend. This ensures the chart reflects trades
+  // performed locally and avoids mixing in server values.
+  if(simRunning) {
+    if(simEquityHistory.length) {
+      buildEquityChart(simEquityHistory);
+      el.equityEmpty.hidden = true;
+    } else {
+      // No simulation data yet; show initial flat line
+      const data = fakeEquity(range);
+      buildEquityChart(data);
+      el.equityEmpty.hidden = false;
+    }
+    return;
+  }
   try {
     const res = await getJSON(`${API_BASE}/api/performance/today?range=${encodeURIComponent(range)}`);
     const data = (res?.series || []).map(d => ({ x: new Date(d.t), y: d.v }));
@@ -346,10 +515,16 @@ async function loadEquity(range='1M') {
   }
 }
 async function loadWatchlist() {
+  // If simulation is running, use the simulated watchlist
+  if(simRunning && simWatchlist.length) {
+    renderWatchlist(simWatchlist);
+    return;
+  }
   let list;
   try {
     const res = await getJSON(`${API_BASE}/api/watchlist`);
-    list = Array.isArray(res) ? res : res?.items;
+    // Backends may return { watchlist: [...] }
+    list = Array.isArray(res) ? res : res?.watchlist ?? res?.items;
     if(!list || !list.length) throw new Error('empty');
   } catch {
     list = fakeWatchlist();
@@ -399,22 +574,42 @@ function fakeTradeLog() {
   });
 }
 async function loadTradeLog() {
+  // If our simulation is running, use the simulated trade log instead of
+  // fetching from the backend. This gives an immediate sense of activity
+  // without relying on a live trading engine.
+  if(simRunning && simTradeLog.length) {
+    renderTradeLog(simTradeLog);
+    return;
+  }
   let trades;
   try {
-    const res = await getJSON(`${API_BASE}/api/trades`);
-    trades = Array.isArray(res) ? res : res?.items;
+    // Try to fetch from the backend. Some backends expose /api/trades or
+    // return a structure with an "items" array.
+    const res = await getJSON(`${API_BASE}/api/trades/last`);
+    // Backend returns a single trade object. Wrap it in an array if needed.
+    if(res && res.time) {
+      trades = [res];
+    } else {
+      trades = Array.isArray(res) ? res : res?.items;
+    }
     if(!trades || !trades.length) throw new Error('empty');
   } catch {
+    // When no data from the server, use sample logs so the UI stays populated.
     trades = fakeTradeLog();
-    // show toast only during preview mode (not necessary)
   }
   renderTradeLog(trades);
 }
 function renderTradeLog(trades) {
   el.tradeLog.innerHTML = '';
+  const emptyEl = document.getElementById('tradeEmpty');
+  if(!trades || trades.length === 0) {
+    emptyEl.style.display = 'block';
+    return;
+  }
+  emptyEl.style.display = 'none';
   trades.forEach(tr => {
     const li = document.createElement('li');
-    const sideClass = tr.side.toUpperCase() === 'BUY' ? 'side-buy' : 'side-sell';
+    const sideClass = (tr.side || '').toUpperCase() === 'BUY' ? 'side-buy' : 'side-sell';
     li.innerHTML = `
       <span>${tr.time}</span>
       <span>${tr.symbol}</span>
@@ -572,9 +767,15 @@ async function sendControl(cmd) {
     await postJSON(`${API_BASE}/api/control/${cmd}`, {});
     // Manage update loop based on command
     if(cmd === 'start') {
+      // When starting, kick off periodic updates from the backend and
+      // initialize our local simulation. This will keep the UI lively
+      // even if the backend has no real trades or performance data.
       startUpdates();
+      startSimulation();
     } else if(cmd === 'pause' || cmd === 'kill') {
+      // On pause or kill, stop periodic updates and halt the simulation.
       stopUpdates();
+      stopSimulation();
     }
   } catch {
     toast(`Server unreachable — ${cmd} queued locally`, 'warn', 2000);
@@ -593,7 +794,10 @@ el.addSymbolButton.addEventListener('click', async (e) => {
   if(!val) return;
   try {
     // Attempt to send to backend (if API supports)
-    await postJSON(`${API_BASE}/api/watchlist`, { symbol: val });
+    // Use the backend endpoint for adding a symbol. The API expects a query param
+    // e.g. /api/watchlist/add?symbol=BTC/USD. Fall back locally on failure.
+    await postJSON(`${API_BASE}/api/watchlist/add?symbol=${encodeURIComponent(val)}`, {});
+    // Reload watchlist to reflect new symbol
     loadWatchlist();
     toast('Symbol added', 'success', 1500);
   } catch {
