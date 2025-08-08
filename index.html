@@ -80,14 +80,14 @@
       <div class="card settings-card">
         <div class="card-title">Trading Settings</div>
         <form id="settingsForm">
-          <label for="initialBalance">Initial Balance ($)</label>
-          <input id="initialBalance" type="number" min="0" step="100" placeholder="10000" />
-          <label for="positionSizePct">Position Size (% of equity)</label>
-          <input id="positionSizePct" type="number" min="0" max="100" step="1" placeholder="10" />
-          <label for="stopLossPct">Stop Loss (%)</label>
-          <input id="stopLossPct" type="number" min="0" max="100" step="0.1" placeholder="2" />
-          <label for="maxDailyLossPct">Max Daily Loss (%)</label>
-          <input id="maxDailyLossPct" type="number" min="0" max="100" step="0.1" placeholder="5" />
+          <label for="initialBalance" title="The starting cash for your paper trading account">Initial Balance ($)</label>
+          <input id="initialBalance" type="number" min="0" step="100" placeholder="10000" title="Starting cash for your account" />
+          <label for="positionSizePct" title="Percentage of your equity allocated to each trade">Position Size (% of equity)</label>
+          <input id="positionSizePct" type="number" min="0" max="100" step="1" placeholder="10" title="Portion of your equity allocated to each trade" />
+          <label for="stopLossPct" title="Maximum acceptable percentage loss per trade before exiting">Stop Loss (%)</label>
+          <input id="stopLossPct" type="number" min="0" max="100" step="0.1" placeholder="2" title="Threshold at which a losing position will be closed" />
+          <label for="maxDailyLossPct" title="Maximum percentage of account equity you are willing to lose in a single day">Max Daily Loss (%)</label>
+          <input id="maxDailyLossPct" type="number" min="0" max="100" step="0.1" placeholder="5" title="Maximum percentage of total equity you are willing to lose in one day" />
           <label for="strategy">Strategy</label>
           <select id="strategy">
             <option value="momentum">Momentum</option>
