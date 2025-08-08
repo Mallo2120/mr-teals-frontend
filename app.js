@@ -43,6 +43,36 @@ const el = {
   addSymbolButton: document.getElementById('addSymbolButton')
 };
 
+// Timer for periodic updates when bot is running
+let updateTimer = null;
+
+/**
+ * Start periodic updates of performance, snapshot, equity and watchlist.
+ * This runs every 5 seconds until stopped.
+ */
+function startUpdates() {
+  stopUpdates();
+  updateTimer = setInterval(() => {
+    loadPerformance();
+    loadSnapshot();
+    // Determine currently active range chip for equity
+    const activeChip = document.querySelector('.range-chips .chip.active');
+    const range = activeChip ? activeChip.dataset.range : '1M';
+    loadEquity(range);
+    loadWatchlist();
+  }, 5000);
+}
+
+/**
+ * Stop the periodic update interval.
+ */
+function stopUpdates() {
+  if(updateTimer) {
+    clearInterval(updateTimer);
+    updateTimer = null;
+  }
+}
+
 /* --------------------------------------------------------------------------
    Utilities
 --------------------------------------------------------------------------- */
@@ -131,10 +161,18 @@ function rangeToPoints(range) {
   }
 }
 function fakeEquity(range='1M') {
+  // Return a flat line at a constant initial value (e.g. $10,000) when no real data is available.
   const pts = rangeToPoints(range);
-  const start = 10000 + Math.random()*5000;
-  const series = generateSeries(pts, start, 0.5, 0.9);
-  return series.map(p => ({ x: new Date(p.t), y: p.v }));
+  const initial = 10000;
+  const out = [];
+  const now = Date.now();
+  // Distribute points over a 6-month span for chart spacing
+  const spanMs = 1000 * 60 * 60 * 24 * 180;
+  for (let i = pts - 1; i >= 0; i--) {
+    const t = now - (spanMs / pts) * i;
+    out.push({ x: new Date(t), y: initial });
+  }
+  return out;
 }
 function fakePerformanceToday() {
   const realized = (Math.random()-0.3) * 400;
@@ -483,6 +521,12 @@ async function sendControl(cmd) {
   try {
     toast(`${cmd.toUpperCase()} sent`, 'success', 1600);
     await postJSON(`${API_BASE}/api/control/${cmd}`, {});
+    // Manage update loop based on command
+    if(cmd === 'start') {
+      startUpdates();
+    } else if(cmd === 'pause' || cmd === 'kill') {
+      stopUpdates();
+    }
   } catch {
     toast(`Server unreachable — ${cmd} queued locally`, 'warn', 2000);
   }
