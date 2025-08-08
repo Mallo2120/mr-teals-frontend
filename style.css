@@ -104,3 +104,60 @@ body {
   #settingsForm { grid-template-columns: 1fr; }
   .trade-form { grid-template-columns: 1fr 1fr; }
 }
+
+/* -------------------- Modal -------------------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(2px);
+  z-index: 100;
+}
+.modal.active {
+  display: flex;
+}
+.modal-content {
+  background: linear-gradient(180deg, var(--graphite-2), #0f1a20);
+  padding: 20px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 420px;
+  border: 1px solid #1f343e;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  color: var(--text);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.modal-header span {
+  font-size: 20px;
+  font-weight: 600;
+}
+.modal-body p {
+  margin: 6px 0;
+  font-size: 14px;
+}
+#modalClose {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+#modalClose:hover {
+  color: var(--teal);
+}
+
+/* Estimated cost display under manual trade */
+#manualEst {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}

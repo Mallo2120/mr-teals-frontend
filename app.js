@@ -90,10 +90,21 @@ function fmtUSD(n) {
   return `${sign}$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/* -------------------- State -------------------- */
+
+// Keep track of the currently selected equity chart range. This is used when
+// refreshing performance data periodically so we respect the user’s selection.
+let currentRange = "1M";
+
+// Timer used for debouncing price lookups when estimating trade cost
+let estimateTimer = null;
+
 /* -------------------- Loaders -------------------- */
 
 async function loadPerformance(range = "1M") {
   try {
+    // Persist the last requested range for periodic refreshes
+    currentRange = range;
     const res = await getJSON(`${API_BASE}/api/performance/today?range=${encodeURIComponent(range)}`);
     const realized = Number(res?.realized ?? 0);
     const unrealized = Number(res?.unrealized ?? 0);
@@ -181,6 +192,8 @@ function renderWatchlist(items) {
     const priceStr = it.price != null ? fmtUSD(it.price) : "—";
     const chgStr = it.changePct != null ? `${(it.changePct >= 0 ? "+" : "")}\${it.changePct.toFixed(2)}%` : "—";
     li.innerHTML = `<span>${it.symbol}</span><span>${priceStr}</span><span class="${chgClass}">${chgStr}</span><span aria-hidden="true">›</span>`;
+    // Clicking on a watchlist row opens a modal showing details for that symbol
+    li.addEventListener("click", () => openSymbolModal(it.symbol));
     el.watchlist.appendChild(li);
   });
 }
@@ -237,13 +250,51 @@ el.btnReset.addEventListener("click", async () => {
   try {
     await postJSON(`${API_BASE}/api/reset`, {});
     toast("Reset complete");
-    await Promise.all([loadSnapshot(), loadPerformance(), loadTradeLog(), loadWatchlist()]);
+    await Promise.all([
+      loadSnapshot(),
+      loadPerformance(currentRange),
+      loadTradeLog(),
+      loadWatchlist(),
+    ]);
   } catch (e) {
     toast("Reset failed", "error");
   }
 });
 
 /* -------------------- Manual trade -------------------- */
+
+// Estimate the cost of a manual trade by looking up the latest price.  This
+// provides instant feedback to the user before executing a trade.  We debounce
+// API requests so that typing in the inputs doesn’t spam the backend.
+function updateManualEstimate() {
+  clearTimeout(estimateTimer);
+  estimateTimer = setTimeout(async () => {
+    const symbol = (el.manualSymbol.value || "").trim();
+    const qty = Number(el.manualQty.value);
+    const output = document.getElementById("manualEst");
+    if (!symbol || !qty || qty <= 0) {
+      output.textContent = "";
+      return;
+    }
+    try {
+      const data = await getJSON(`${API_BASE}/api/prices?symbols=${encodeURIComponent(symbol)}`);
+      const info = data?.[symbol] ?? {};
+      const price = info.price != null ? info.price : (typeof info === "number" ? info : null);
+      if (price != null && !isNaN(price)) {
+        const cost = price * qty;
+        output.textContent = `Est. Price: ${fmtUSD(price)} | Est. Cost: ${fmtUSD(cost)}`;
+      } else {
+        output.textContent = "No price data";
+      }
+    } catch (err) {
+      output.textContent = "Price lookup error";
+    }
+  }, 400);
+}
+
+// Update estimate whenever symbol or quantity changes
+el.manualSymbol.addEventListener("input", updateManualEstimate);
+el.manualQty.addEventListener("input", updateManualEstimate);
 
 el.manualTradeForm.addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -259,7 +310,14 @@ el.manualTradeForm.addEventListener("submit", async (e) => {
     toast(`${side} ${qty} ${symbol} sent`);
     el.manualQty.value = "";
     // refresh UI pieces
-    await Promise.all([loadSnapshot(), loadPerformance(), loadTradeLog(), loadWatchlist()]);
+    await Promise.all([
+      loadSnapshot(),
+      loadPerformance(currentRange),
+      loadTradeLog(),
+      loadWatchlist(),
+    ]);
+    // Clear estimate after trade
+    document.getElementById("manualEst").textContent = "";
   } catch (e2) {
     toast(`Trade failed: ${e2.message}`, "error");
   }
@@ -321,6 +379,44 @@ function renderTradeLog(trades) {
   });
 }
 
+/* -------------------- Symbol details modal -------------------- */
+// Open a modal displaying details for the selected symbol.  It fetches the
+// latest price and change from the backend and renders them in a simple
+// information card.  If the lookup fails, a message is shown instead.
+function openSymbolModal(symbol) {
+  const modal = document.getElementById("symbolModal");
+  const modalSymbol = document.getElementById("modalSymbol");
+  const modalBody = document.getElementById("modalBody");
+  modalSymbol.textContent = symbol;
+  modalBody.innerHTML = "<p>Loading…</p>";
+  modal.classList.add("active");
+
+  getJSON(`${API_BASE}/api/prices?symbols=${encodeURIComponent(symbol)}`)
+    .then((data) => {
+      const info = data?.[symbol] ?? {};
+      const price = info.price != null ? info.price : (typeof info === "number" ? info : null);
+      const change = info.changePct != null ? info.changePct : null;
+      const priceStr = price != null ? fmtUSD(price) : "—";
+      const changeStr = change != null ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "—";
+      modalBody.innerHTML = `<p>Price: ${priceStr}</p><p>Change: ${changeStr}</p>`;
+    })
+    .catch(() => {
+      modalBody.innerHTML = "<p>Error loading price</p>";
+    });
+}
+
+// Initialize modal close handlers.  Clicking the close button or the shaded
+// backdrop will dismiss the modal.
+(function initModal() {
+  const modal = document.getElementById("symbolModal");
+  const closeBtn = document.getElementById("modalClose");
+  if (!modal || !closeBtn) return;
+  closeBtn.addEventListener("click", () => modal.classList.remove("active"));
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) modal.classList.remove("active");
+  });
+})();
+
 /* -------------------- Equity range chips -------------------- */
 el.chips.forEach((chip) => {
   chip.addEventListener("click", async () => {
@@ -362,5 +458,22 @@ async function boot() {
     el.addSymbolInput.value = "";
     await loadWatchlist();
   });
+
+  // Periodically refresh key data (snapshot, performance, trades and watchlist)
+  async function refreshAll() {
+    try {
+      // respect the user's selected range when refreshing performance
+      await Promise.all([
+        loadSnapshot(),
+        loadPerformance(currentRange),
+        loadTradeLog(),
+        loadWatchlist(),
+      ]);
+    } catch (e) {
+      console.warn("Periodic refresh failed:", e.message);
+    }
+  }
+  // Start polling every 10 seconds to provide near real‑time feedback
+  setInterval(refreshAll, 10000);
 }
 document.addEventListener("DOMContentLoaded", boot);

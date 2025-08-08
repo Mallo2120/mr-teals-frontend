@@ -124,6 +124,8 @@
         </label>
         <button class="btn" type="submit">Execute</button>
       </form>
+      <!-- Estimated cost display will update as the user enters a symbol and quantity -->
+      <div id="manualEst" class="muted"></div>
     </section>
 
     <section class="card span2">
@@ -142,6 +144,17 @@
   </main>
 
   <div id="toastContainer" class="toasts"></div>
+
+  <!-- Modal for symbol details -->
+  <div id="symbolModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span id="modalSymbol"></span>
+        <button id="modalClose" class="btn btn-ghost" type="button" aria-label="Close">×</button>
+      </div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
   <script src="./app.js"></script>
 </body>
 </html>
