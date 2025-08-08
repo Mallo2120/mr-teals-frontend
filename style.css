@@ -1,453 +1,352 @@
-/*
- * Styling for the Mr. Teals frontend.
- *
- * The aesthetic combines a warm teal accent with a dark, slightly textured
- * background. Panels are semi‑transparent with a blur effect to give
- * depth, and controls are clearly delineated. Feel free to enhance
- * animations and transitions further to suit your own tastes.
- */
-
+/* Mr. Teals Dashboard Styles (Teal & Graphite theme) */
+/* Root variables for dark and light themes */
+:root {
+  --bg: #0F1F26;
+  --bg-card: #15252f;
+  --text-primary: #f5f7fa;
+  --text-secondary: #96a0ad;
+  --accent: #11c5c6;
+  --negative: #e74c3c;
+  --border-radius: 8px;
+}
 body {
   margin: 0;
-  font-family: Arial, Helvetica, sans-serif;
-  background: linear-gradient(to bottom right, #0b3d4a, #012d3a);
-  color: #f0f0f0;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: var(--bg);
+  color: var(--text-primary);
+  height: 100vh;
 }
-
-.header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-}
-
-.logo-container {
-  display: flex;
-  align-items: center;
-}
-
-.logo {
-  width: 50px;
-  height: 50px;
-  margin-right: 0.75rem;
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.4);
-}
-
-.controls button {
-  margin-left: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #008080;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.3s ease;
-}
-
-.controls button:hover {
-  background: #00a0a0;
-}
-
-main {
-  flex: 1;
-  padding: 1rem;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  grid-gap: 1rem;
-  align-items: flex-start;
-}
-
-.panel {
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 8px;
-  padding: 1rem;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  min-height: 150px;
-}
-
-.panel h2 {
-  margin-top: 0;
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
-}
-
-#watchlist-section {
-  grid-column: 1 / -1;
-}
-
-    /* Settings panel fields */
-    .settings-field {
-      display: flex;
-      flex-direction: column;
-      margin-bottom: 0.5rem;
-    }
-
-    .settings-field label {
-      margin-bottom: 0.25rem;
-      font-size: 0.9rem;
-      color: #aacccc;
-    }
-
-    .settings-field input {
-      padding: 0.5rem;
-      border: none;
-      border-radius: 4px;
-      font-size: 0.9rem;
-    }
-
-    #save-settings-btn {
-      margin-top: 0.5rem;
-      padding: 0.5rem 1rem;
-      background: #004444;
-      border: none;
-      border-radius: 6px;
-      color: #fff;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: background 0.3s ease;
-    }
-
-    #save-settings-btn:hover {
-      background: #006666;
-    }
-
-    /* Chart panel styles */
-    #chart-section {
-      grid-column: 1 / -1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    #chart-section canvas {
-      width: 100%;
-      height: 300px;
-    }
-
-#watchlist {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 1rem 0;
-}
-
-#watchlist li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-#watchlist li:last-child {
-  border-bottom: none;
-}
-
-#watchlist li span.symbol {
-  flex-grow: 1;
-  font-weight: bold;
-  color: #00cccc;
-}
-
-#watchlist li span.price {
-  margin-right: 1rem;
-}
-
-#watchlist li button {
-  padding: 0.25rem 0.5rem;
-  background: #aa0000;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: background 0.2s ease;
-}
-
-#watchlist li button:hover {
-  background: #cc2222;
-}
-
-.watchlist-input {
-  display: flex;
-  align-items: center;
-}
-
-.watchlist-input input {
-  flex-grow: 1;
-  padding: 0.5rem;
-  margin-right: 0.5rem;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.watchlist-input button {
-  padding: 0.5rem 1rem;
-  background: #006666;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-.watchlist-input button:hover {
-  background: #008888;
-}
-
-footer {
-  text-align: center;
-  padding: 1rem;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-/* Modal overlay for crypto details */
-.modal {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  background-color: rgba(0, 0, 0, 0.8);
-}
-
-/* Modal content container */
-.modal-content {
-  background: rgba(0, 20, 20, 0.9);
-  margin: 5% auto;
-  padding: 1rem;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 800px;
-  color: #f0f0f0;
-  /* Constrain modal height and allow internal scrolling so the page scroll bar isn't overwhelmed */
-  max-height: 80vh;
-  overflow-y: auto;
-}
-
-.modal-content h2 {
-  margin-top: 0;
-}
-
-/* Close button for modal */
-.close {
-  float: right;
-  font-size: 1.5rem;
-  cursor: pointer;
-}
-
-/* Chart inside crypto modal */
-#crypto-chart {
-  width: 100%;
-  height: 300px;
-  max-height: 300px;
-}
-
-/* Info section inside modal */
-#crypto-info {
-  margin-top: 1rem;
-}
-
-/* Timeframe buttons for crypto chart */
-#crypto-timeframes button {
-  margin: 0.5rem 0.5rem 0 0;
-  padding: 0.25rem 0.5rem;
-  background: #006666;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.2s ease;
-}
-
-/* Active timeframe button */
-#crypto-timeframes button.active {
-  background: #00cccc;
-}
-
-/* ===============================
-   New generic dashboard styling
-   =============================== */
-
-/* Navbar at the top */
+/* Navbar */
 .navbar {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(6px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Brand (logo and name) */
-.brand {
-  display: flex;
   align-items: center;
+  padding: 0.5rem 1rem;
+  background: #0c1a20;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.6);
 }
-.brand img {
-  width: 40px;
-  height: 40px;
-  margin-right: 0.75rem;
-  border-radius: 50%;
-  object-fit: cover;
-  box-shadow: 0 0 8px rgba(0, 0, 0, 0.3);
+.logo {
+  font-weight: bold;
+  font-size: 1.25rem;
+  color: var(--accent);
 }
-.brand span {
+.control-btn {
+  margin-left: 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border: none;
+  border-radius: var(--border-radius);
+  background: var(--bg-card);
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+.control-btn:hover {
+  background: #1f3440;
+}
+.summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1rem;
+}
+.card {
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  padding: 1rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+.summary-card {
+  flex: 1 1 calc(25% - 1rem);
+  min-width: 220px;
+}
+.card-title {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.3rem;
+}
+.card-value {
   font-size: 1.5rem;
   font-weight: bold;
+  margin-bottom: 0.3rem;
 }
-
-/* Header control buttons */
-.actions button {
-  margin-left: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #008080;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.3s ease;
+.card-sub {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
 }
-.actions button:hover {
-  background: #00a0a0;
-}
-
-/* Card grid layout */
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+.main-grid {
+  display: flex;
+  flex-wrap: wrap;
   gap: 1rem;
-  margin: 1rem 0;
+  padding: 0 1rem 1rem;
 }
-
-/* Card container */
-.card {
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 8px;
-  padding: 1rem;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  min-height: 180px;
+.chart-card {
+  flex: 2 1 60%;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
 }
-.card h2 {
-  margin-top: 0;
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
+.chart-container {
+  position: relative;
+  height: 300px;
 }
-
-/* Settings fields (inside settings card) */
-.card .settings-field {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 0.5rem;
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
-.card .settings-field label {
-  margin-bottom: 0.25rem;
+.empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-secondary);
   font-size: 0.9rem;
-  color: #aacccc;
 }
-.card .settings-field input {
+.side-col {
+  flex: 1 1 35%;
+  min-width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.settings-card {}
+.settings-card label {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+.settings-card input,
+.settings-card select {
+  width: 100%;
+  padding: 0.4rem;
+  margin-top: 0.2rem;
+  border-radius: var(--border-radius);
+  border: 1px solid #33485e;
+  background: #0d1a22;
+  color: var(--text-primary);
+}
+.save-btn {
+  margin-top: 0.7rem;
+  width: 100%;
   padding: 0.5rem;
   border: none;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-#save-settings-btn {
-  margin-top: 0.5rem;
-  padding: 0.5rem 1rem;
-  background: #004444;
-  border: none;
-  border-radius: 6px;
-  color: #fff;
+  border-radius: var(--border-radius);
+  background: var(--accent);
+  color: #0f1f26;
+  font-weight: bold;
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: background 0.3s ease;
+  transition: opacity 0.2s;
 }
-#save-settings-btn:hover {
-  background: #006666;
+.save-btn:hover {
+  opacity: 0.85;
 }
-
-/* Watchlist styles inside card */
-#watchlist {
+.watchlist-card ul {
   list-style: none;
   padding: 0;
-  margin: 0 0 1rem 0;
+  margin: 0;
 }
-#watchlist li {
+.watchlist-card .wl-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-#watchlist li:last-child {
-  border-bottom: none;
-}
-#watchlist li span.symbol {
-  flex-grow: 1;
-  font-weight: bold;
-  color: #00cccc;
-}
-#watchlist li span.price {
-  margin-right: 1rem;
-}
-#watchlist li button {
-  padding: 0.25rem 0.5rem;
-  background: #aa0000;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
+  padding: 0.6rem;
+  border-bottom: 1px solid #1d2d38;
   cursor: pointer;
-  font-size: 0.8rem;
-  transition: background 0.2s ease;
 }
-#watchlist li button:hover {
-  background: #cc2222;
+.watchlist-card .wl-row:hover {
+  background: #1a2b36;
+}
+.watchlist-card .wl-row span {
+  flex: 1 1;
+  font-size: 0.85rem;
+}
+.watchlist-card .wl-row .chg-pos {
+  color: #2ecc71;
+}
+.watchlist-card .wl-row .chg-neg {
+  color: var(--negative);
 }
 .watchlist-input {
   display: flex;
-  align-items: center;
+  margin-top: 0.5rem;
 }
 .watchlist-input input {
-  flex-grow: 1;
-  padding: 0.5rem;
-  margin-right: 0.5rem;
+  flex: 1 1 auto;
+  padding: 0.4rem;
+  border-radius: var(--border-radius);
+  border: 1px solid #33485e;
+  background: #0d1a22;
+  color: var(--text-primary);
+}
+.add-symbol-btn {
+  margin-left: 0.5rem;
+  padding: 0.4rem 0.7rem;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--border-radius);
+  background: var(--accent);
+  color: #0f1f26;
+  cursor: pointer;
+}
+.add-symbol-btn:hover {
+  opacity: 0.85;
+}
+.range-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+.chip {
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--border-radius);
+  background: #0c1a20;
+  color: var(--text-primary);
+  border: 1px solid #1e3746;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+.chip.active {
+  background: var(--accent);
+  color: #0f1f26;
+}
+.chip:hover {
+  background: #1d2d3b;
+}
+.range-chips.mini {
+  margin-top: 0.5rem;
+}
+.range-chips.mini .chip {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+}
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: none;
+}
+.modal-overlay.open {
+  display: block;
+}
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  background: var(--bg-card);
+  border-radius: var(--border-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal.open {
+  display: flex;
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.8rem;
+  border-bottom: 1px solid #1d2d38;
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+.modal-close {
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+.modal-body {
+  padding: 0.8rem;
+  overflow-y: auto;
+}
+.modal-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.8rem;
+}
+.modal-info .label {
+  font-weight: bold;
+  color: var(--text-secondary);
+  margin-right: 0.4rem;
+}
+.modal-chart {
+  height: 200px;
+}
+.modal-chart canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+.facts-section h3 {
+  margin-top: 0.5rem;
+  margin-bottom: 0.4rem;
   font-size: 0.9rem;
 }
-.watchlist-input button {
-  padding: 0.5rem 1rem;
-  background: #006666;
-  border: none;
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.2s ease;
+.facts-section ul {
+  list-style: disc;
+  padding-left: 1.2rem;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
-.watchlist-input button:hover {
-  background: #008888;
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
-
-/* Equity chart sizing inside card */
-#equity-chart-card canvas {
-  width: 100%;
-  height: 250px;
+.toast {
+  padding: 0.6rem 1rem;
+  border-radius: var(--border-radius);
+  font-size: 0.85rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.toast.success {
+  background: #2ecc71;
+  color: #0f1f26;
+}
+.toast.warn {
+  background: #e67e22;
+  color: #0f1f26;
+}
+.toast.error {
+  background: var(--negative);
+  color: #0f1f26;
+}
+@media (max-width: 768px) {
+  .summary-card {
+    flex: 1 1 100%;
+  }
+  .chart-card {
+    flex: 1 1 100%;
+  }
+  .side-col {
+    flex: 1 1 100%;
+  }
+}
+/* Light theme overrides */
+.light {
+  --bg: #f6f8fa;
+  --bg-card: #ffffff;
+  --text-primary: #1c2e3a;
+  --text-secondary: #667681;
+  --accent: #08a0a1;
+  --negative: #e74c3c;
 }
