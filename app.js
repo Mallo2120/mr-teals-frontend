@@ -306,6 +306,32 @@ el.manualTradeForm.addEventListener("submit", async (e) => {
     return;
   }
   try {
+    // Before placing a BUY trade, verify sufficient cash based on latest price
+    if (side === "BUY") {
+      try {
+        const priceData = await getJSON(
+          `${API_BASE}/api/prices?symbols=${encodeURIComponent(symbol)}`
+        );
+        const info = priceData?.[symbol] ?? {};
+        const price = info.price != null ? info.price : (typeof info === "number" ? info : null);
+        if (price == null || isNaN(price)) {
+          toast("Price unavailable for validation", "warn");
+        } else {
+          const snapshot = await getJSON(`${API_BASE}/api/account/snapshot`);
+          const cash = Number(snapshot?.cash ?? 0);
+          const cost = price * qty;
+          if (cost > cash) {
+            toast(
+              `Not enough cash: need ${fmtUSD(cost)}, have ${fmtUSD(cash)}`,
+              "error"
+            );
+            return;
+          }
+        }
+      } catch (err) {
+        // if validation fails silently, allow backend to decide
+      }
+    }
     // /api/trade expects query parameters rather than a JSON body
     const url = `${API_BASE}/api/trade?symbol=${encodeURIComponent(symbol)}&side=${encodeURIComponent(side)}&quantity=${encodeURIComponent(qty)}`;
     await withTimeout(
