@@ -1,11 +1,20 @@
+// Client side logic for the Mr. Teals dashboard.
+//
+// This script establishes a WebSocket connection to the backend, polls
+// periodic REST endpoints for account state and performance, and updates
+// the DOM accordingly. It also wires up the control buttons and
+// watchlist management UI to the corresponding REST endpoints.
+
 (() => {
   // Determine the WebSocket URL. The backend is assumed to run on port
   // 8000 on the same host. When deploying behind a proxy, adjust this
   // accordingly or expose an environment variable via the frontend.
-  const wsProtocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  // Remove port from host if present (e.g. localhost:3000 -> localhost)
-  const host = location.host.split(':')[0];
-  const wsUrl = `${wsProtocol}://${host}:8000/ws`;
+  // Define the API and WebSocket base URLs for production (Render backend).
+  // When running locally, these can be left undefined to fall back to the
+  // default localhost URLs. See fetchAPI below for details.
+  const API_BASE = 'https://mr-teals-backend.onrender.com';
+  // Use a fixed WebSocket URL pointing at the Render backend for production.
+  const wsUrl = 'wss://mr-teals-backend.onrender.com/ws';
   let socket;
 
   function connectWebSocket() {
@@ -36,7 +45,10 @@
   connectWebSocket();
 
   async function fetchAPI(endpoint, method = 'GET', body = null) {
-    const url = '/api' + endpoint;
+    // Build the full API URL using the configured API_BASE. When running locally,
+    // API_BASE will be defined above and used. If API_BASE is undefined (e.g.
+    // during development), the path remains relative to the frontend origin.
+    const url = (typeof API_BASE !== 'undefined' ? API_BASE : '') + '/api' + endpoint;
     const options = { method, headers: { 'Content-Type': 'application/json' } };
     if (body) options.body = JSON.stringify(body);
     const res = await fetch(url, options);
