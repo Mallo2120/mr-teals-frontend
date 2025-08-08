@@ -53,21 +53,17 @@ const el = {
 // Timer for periodic updates when bot is running
 let updateTimer = null;
 
-// Timer for simulation when the bot is running. This drives price updates,
-// PnL calculations and trade log generation locally. When `simInterval` is
-// active, the UI will update every few seconds to reflect simulated activity.
-let simInterval = null;
-
-// Simulation state
-let simRunning = false;
-let simPositions = {};
-let simWatchlist = [];
-let simCash = 10000;
-let simRealizedPnl = 0;
-let simUnrealizedPnl = 0;
-let simEquityHistory = [];
-let simTradeLog = [];
-let simInitialBalance = 10000;
+// Strategy engine state. The strategy will run a simple moving average crossover on the
+// watchlist symbols. When running, it periodically fetches live prices, computes
+// short and long moving averages, and executes trades via the backend if crossovers occur.
+let strategyRunning = false;
+let strategyInterval = null;
+// For each symbol, strategyState tracks price history and whether we currently hold a position.
+let strategyState = {};
+// For each symbol, botPositions tracks the quantity currently held. This mirrors
+// backend positions for the purposes of deciding sell sizes. It is updated when
+// we successfully execute trades via the API.
+let botPositions = {};
 
 /**
  * Start the local simulation loop. This sets the running flag, resets the
@@ -128,58 +124,22 @@ function resetSimulation() {
  */
 function executeManualTrade(symbol, side, qty) {
   if(!symbol || !qty || qty <= 0) return;
-  // Find current price; fallback to 0 if unknown
-  const currentPrice = (simWatchlist.find(item => item.symbol === symbol)?.price) || 0;
-  if(currentPrice <= 0) {
-    toast('Unknown price; cannot trade', 'warn', 2200);
-    return;
-  }
-  const tradeValue = qty * currentPrice;
-  if(side === 'BUY') {
-    if(tradeValue > simCash) {
-      toast('Insufficient cash for trade', 'warn', 2500);
-      return;
+  // Execute trade via backend
+  manualTradeAPI(symbol, side, qty).then(success => {
+    if(success) {
+      // Update local botPositions map
+      if(side === 'BUY') {
+        botPositions[symbol] = (botPositions[symbol] || 0) + qty;
+      } else {
+        botPositions[symbol] = Math.max(0, (botPositions[symbol] || 0) - qty);
+      }
+      // Refresh UI
+      loadSnapshot();
+      loadPerformance();
+      loadTradeLog();
+      loadWatchlist();
     }
-    simCash -= tradeValue;
-    if(simPositions[symbol]) {
-      const pos = simPositions[symbol];
-      const totalCost = pos.qty * pos.avgCost + tradeValue;
-      pos.qty += qty;
-      pos.avgCost = totalCost / pos.qty;
-    } else {
-      simPositions[symbol] = { qty, avgCost: currentPrice };
-    }
-    simTradeLog.push({ time: new Date().toISOString().slice(0,19).replace('T',' '), symbol, side:'BUY', qty: qty.toFixed(3), price: currentPrice.toFixed(2) });
-  } else if(side === 'SELL') {
-    const pos = simPositions[symbol];
-    if(!pos || pos.qty < qty) {
-      toast('Not enough position to sell', 'warn', 2400);
-      return;
-    }
-    simCash += tradeValue;
-    simRealizedPnl += qty * (currentPrice - pos.avgCost);
-    pos.qty -= qty;
-    if(pos.qty <= 0) {
-      delete simPositions[symbol];
-    }
-    simTradeLog.push({ time: new Date().toISOString().slice(0,19).replace('T',' '), symbol, side:'SELL', qty: qty.toFixed(3), price: currentPrice.toFixed(2) });
-  }
-  // Update positions value and PnL
-  simUnrealizedPnl = 0;
-  let positionsValue = 0;
-  Object.keys(simPositions).forEach(sym => {
-    const pos = simPositions[sym];
-    const price = (simWatchlist.find(item => item.symbol === sym)?.price) || pos.avgCost;
-    positionsValue += pos.qty * price;
-    simUnrealizedPnl += pos.qty * (price - pos.avgCost);
   });
-  const equity = simCash + positionsValue;
-  simEquityHistory.push({ x: new Date(), y: equity });
-  // Refresh UI
-  applyPerformance({ realized: simRealizedPnl, unrealized: simUnrealizedPnl, trades: simTradeLog.length });
-  applySnapshot({ equity, cash: simCash, positions: positionsValue });
-  renderTradeLog(simTradeLog);
-  buildEquityChart(simEquityHistory);
 }
 
 /**
@@ -301,23 +261,15 @@ async function simulateStep() {
 function startUpdates() {
   stopUpdates();
   updateTimer = setInterval(() => {
-    // When simulation is running, backend polling is unnecessary. The
-    // simulation itself updates the UI via simulateStep(). Only update the
-    // watchlist and trade log using simulation data.
-    if(simRunning) {
-      // Render simulated watchlist and trade log directly
-      renderWatchlist(simWatchlist);
-      renderTradeLog(simTradeLog);
-    } else {
-      // Otherwise poll the backend for updates
-      loadPerformance();
-      loadSnapshot();
-      const activeChip = document.querySelector('.range-chips .chip.active');
-      const range = activeChip ? activeChip.dataset.range : '1M';
-      loadEquity(range);
-      loadWatchlist();
-      loadTradeLog();
-    }
+    // Poll the backend for fresh data
+    loadPerformance();
+    loadSnapshot();
+    // Load equity chart range using the active chip's dataset.range
+    const activeChip = document.querySelector('.range-chips .chip.active');
+    const range = activeChip ? activeChip.dataset.range : '1M';
+    loadEquity(range);
+    loadWatchlist();
+    loadTradeLog();
   }, 5000);
 }
 
@@ -386,6 +338,162 @@ function fmtPct(p) {
 }
 function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
+}
+
+/* --------------------------------------------------------------------------
+   Price Fetching and Trade Helpers
+--------------------------------------------------------------------------- */
+/**
+ * Fetch current USD prices for a list of symbols from the backend. If the backend
+ * cannot provide a price for a symbol, that entry will be undefined in the
+ * returned object. Symbols should be in the format "BTC/USD".
+ * @param {string[]} symbols
+ * @returns {Promise<Object>} mapping of symbol -> price
+ */
+async function fetchPrices(symbols) {
+  if(!symbols || symbols.length === 0) return {};
+  const q = symbols.map(s => s.trim().toUpperCase()).join(',');
+  try {
+    return await getJSON(`${API_BASE}/api/prices?symbols=${encodeURIComponent(q)}`);
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Execute a manual trade via the backend. Returns true if successful.
+ * Quantity should be a positive number. Side must be BUY or SELL.
+ * @param {string} symbol
+ * @param {string} side
+ * @param {number} qty
+ * @returns {Promise<boolean>}
+ */
+async function manualTradeAPI(symbol, side, qty) {
+  try {
+    const url = `${API_BASE}/api/trade?symbol=${encodeURIComponent(symbol)}&side=${side}&quantity=${qty}`;
+    const res = await postJSON(url, {});
+    if(res && !res.error) {
+      return true;
+    } else {
+      toast(res.error || 'Trade failed', 'warn', 2400);
+      return false;
+    }
+  } catch {
+    toast('Trade request failed', 'warn', 2400);
+    return false;
+  }
+}
+
+/**
+ * Reset the paper account via the backend. Optionally accepts a new starting balance.
+ * After resetting, the UI will reload snapshot, performance and trade log.
+ * @param {number|null} balance
+ */
+async function resetAccount(balance = null) {
+  try {
+    const url = balance != null ? `${API_BASE}/api/reset?balance=${balance}` : `${API_BASE}/api/reset`;
+    await postJSON(url, {});
+    // Reload state after reset
+    await loadSnapshot();
+    await loadPerformance();
+    await loadTradeLog();
+    await loadWatchlist();
+    toast('Account reset', 'info', 2000);
+    // Clear strategy state
+    strategyState = {};
+    botPositions = {};
+  } catch {
+    toast('Reset failed', 'warn', 2400);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Strategy Engine (Moving Average Crossover)
+--------------------------------------------------------------------------- */
+/**
+ * Start the trading strategy. This function fetches the current watchlist from the backend
+ * and then periodically (every 5 seconds) fetches live prices, computes moving averages
+ * and executes trades based on a simple crossover rule. Short window = 3, long window = 6.
+ */
+async function startStrategy() {
+  if(strategyRunning) return;
+  strategyRunning = true;
+  // Initialize state for each watchlist symbol
+  try {
+    const res = await getJSON(`${API_BASE}/api/watchlist`);
+    const list = Array.isArray(res) ? res : res?.watchlist || [];
+    list.forEach(sym => {
+      const s = sym.trim().toUpperCase();
+      strategyState[s] = { history: [], isLong: false };
+      if(!botPositions[s]) botPositions[s] = 0;
+    });
+  } catch {
+    // On failure, do nothing
+  }
+  // Poll every 5 seconds
+  strategyInterval = setInterval(async () => {
+    const symbols = Object.keys(strategyState);
+    if(symbols.length === 0) return;
+    const prices = await fetchPrices(symbols);
+    // Fetch current snapshot once per iteration for position sizing
+    let snapshot;
+    try {
+      snapshot = await getJSON(`${API_BASE}/api/account/snapshot`);
+    } catch {
+      snapshot = null;
+    }
+    symbols.forEach(sym => {
+      const state = strategyState[sym];
+      const price = prices[sym];
+      if(!price) return;
+      state.history.push(price);
+      // Keep last 6 prices
+      if(state.history.length > 6) state.history.shift();
+      if(state.history.length >= 6) {
+        const shortArr = state.history.slice(-3);
+        const longArr = state.history.slice(-6);
+        const shortMA = shortArr.reduce((a,b) => a+b, 0) / shortArr.length;
+        const longMA = longArr.reduce((a,b) => a+b, 0) / longArr.length;
+        if(!state.isLong && shortMA > longMA) {
+          // Enter long position using 10% of available cash
+          const cash = snapshot ? snapshot.cash : 0;
+          const qty = cash * 0.1 / price;
+          if(qty > 0) {
+            manualTradeAPI(sym, 'BUY', qty).then(ok => {
+              if(ok) {
+                state.isLong = true;
+                botPositions[sym] = (botPositions[sym] || 0) + qty;
+              }
+            });
+          }
+        } else if(state.isLong && shortMA < longMA) {
+          // Exit position completely
+          const qty = botPositions[sym] || 0;
+          if(qty > 0) {
+            manualTradeAPI(sym, 'SELL', qty).then(ok => {
+              if(ok) {
+                state.isLong = false;
+                botPositions[sym] = 0;
+              }
+            });
+          }
+        }
+      }
+    });
+    // After trades, refresh UI
+    loadPerformance();
+    loadSnapshot();
+    loadTradeLog();
+    loadWatchlist();
+  }, 5000);
+}
+
+function stopStrategy() {
+  strategyRunning = false;
+  if(strategyInterval) {
+    clearInterval(strategyInterval);
+    strategyInterval = null;
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -666,14 +774,24 @@ async function loadWatchlist() {
   let list;
   try {
     const res = await getJSON(`${API_BASE}/api/watchlist`);
-    // Backends may return { watchlist: [...] }
     list = Array.isArray(res) ? res : res?.watchlist ?? res?.items;
     if(!list || !list.length) throw new Error('empty');
   } catch {
-    list = fakeWatchlist();
-    toast('Using sample watchlist', 'warn', 2000);
+    list = [];
   }
-  renderWatchlist(list);
+  if(!list || list.length === 0) {
+    // If no backend list, fall back to existing watchlist DOM entries
+    const current = [];
+    el.watchlist.querySelectorAll('.wl-row span:first-child').forEach(span => current.push(span.textContent.trim()));
+    list = current;
+  }
+  // Fetch live prices for watchlist symbols
+  const priceMap = await fetchPrices(list);
+  const items = list.map(sym => {
+    const price = priceMap[sym];
+    return { symbol: sym, price: price || 0, changePct: 0 };
+  });
+  renderWatchlist(items);
 }
 function renderWatchlist(items) {
   el.watchlist.innerHTML = '';
@@ -764,12 +882,17 @@ function renderTradeLog(trades) {
   trades.forEach(tr => {
     const li = document.createElement('li');
     const sideClass = (tr.side || '').toUpperCase() === 'BUY' ? 'side-buy' : 'side-sell';
+    // Calculate cost of trade (quantity * price) if available
+    const qtyNum = Number(tr.qty);
+    const priceNum = Number(tr.price);
+    const cost = (qtyNum && priceNum) ? qtyNum * priceNum : null;
     li.innerHTML = `
       <span>${tr.time}</span>
       <span>${tr.symbol}</span>
       <span class="${sideClass}">${tr.side}</span>
       <span>${tr.qty}</span>
       <span>$${Number(tr.price).toLocaleString()}</span>
+      <span>${cost !== null ? '$' + cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}</span>
     `;
     el.tradeLog.appendChild(li);
   });
@@ -921,15 +1044,13 @@ async function sendControl(cmd) {
     await postJSON(`${API_BASE}/api/control/${cmd}`, {});
     // Manage update loop based on command
     if(cmd === 'start') {
-      // When starting, kick off periodic updates from the backend and
-      // initialize our local simulation. This will keep the UI lively
-      // even if the backend has no real trades or performance data.
+      // Start periodic polling and strategy execution. Do not reset account.
       startUpdates();
-      startSimulation();
+      startStrategy();
     } else if(cmd === 'pause' || cmd === 'kill') {
-      // On pause or kill, stop periodic updates and halt the simulation.
+      // Stop updates and strategy without resetting account.
       stopUpdates();
-      stopSimulation();
+      stopStrategy();
     }
   } catch {
     toast(`Server unreachable — ${cmd} queued locally`, 'warn', 2000);
@@ -942,8 +1063,11 @@ el.btnKill.addEventListener('click', () => sendControl('kill'));
 // Reset button: clears state without starting new simulation
 if(el.btnReset) {
   el.btnReset.addEventListener('click', () => {
-    resetSimulation();
-    toast('Simulator reset', 'info', 1800);
+    // Reset backend account and clear strategy state
+    const balVal = parseFloat(document.getElementById('initialBalance').value) || null;
+    resetAccount(balVal);
+    stopStrategy();
+    stopUpdates();
   });
 }
 
@@ -981,13 +1105,32 @@ el.addSymbolButton.addEventListener('click', async (e) => {
 --------------------------------------------------------------------------- */
 async function boot() {
   loadSettings();
-  await Promise.all([
-    loadPerformance(),
-    loadSnapshot(),
-    loadEquity('1M'),
-    loadWatchlist(),
-    loadTradeLog()
-  ]);
+  // Call each load function separately so that one failure doesn’t prevent others from running.
+  try {
+    await loadPerformance();
+  } catch (e) {
+    console.warn('Failed to load performance:', e);
+  }
+  try {
+    await loadSnapshot();
+  } catch (e) {
+    console.warn('Failed to load snapshot:', e);
+  }
+  try {
+    await loadEquity('1M');
+  } catch (e) {
+    console.warn('Failed to load equity:', e);
+  }
+  try {
+    await loadWatchlist();
+  } catch (e) {
+    console.warn('Failed to load watchlist:', e);
+  }
+  try {
+    await loadTradeLog();
+  } catch (e) {
+    console.warn('Failed to load trade log:', e);
+  }
 }
 document.addEventListener('DOMContentLoaded', boot);
 // Custom tooltip handling for settings inputs
