@@ -99,6 +99,78 @@ let currentRange = "1M";
 // Timer used for debouncing price lookups when estimating trade cost
 let estimateTimer = null;
 
+/* -------------------- Local simulation state -------------------- */
+// Because the backend currently does not return price data for many symbols and
+// does not persist manual trades, we maintain a local simulation state.  This
+// state holds the user’s cash, open positions by symbol, executed trades and
+// latest prices.  When backend data is unavailable we fall back to a public
+// price API (Coingecko) to fetch USD quotes.  The local state ensures the
+// trade log and equity snapshot update immediately after each manual trade.
+const COINGECKO_MAP = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  SOL: "solana",
+  DOT: "polkadot",
+  DOGE: "dogecoin",
+};
+let localPrices = {};
+let localCash = 0;
+let localPositions = {};
+let localTrades = [];
+
+// Fetch a USD price for a given symbol.  We first attempt to use the backend
+// `/api/prices` endpoint; if it returns null or an error we fall back to
+// Coingecko.  Returns null when no price can be determined.
+async function getPrice(symbol) {
+  const upper = symbol.toUpperCase();
+  // 1) Try backend
+  try {
+    const data = await getJSON(`${API_BASE}/api/prices?symbols=${encodeURIComponent(upper)}`);
+    const info = data?.[upper] ?? {};
+    const price = info.price != null ? info.price : (typeof info === "number" ? info : null);
+    if (price != null && !isNaN(price)) return price;
+  } catch (e) {
+    // ignore errors
+  }
+  // 2) Fallback to Coingecko
+  const base = upper.split("/")[0];
+  const id = COINGECKO_MAP[base] || base.toLowerCase();
+  try {
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`;
+    const res = await withTimeout(fetch(url, { headers: { Accept: "application/json" } }), 5000);
+    const json = await res.json();
+    const price = json?.[id]?.usd;
+    if (price != null && !isNaN(price)) return price;
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
+// Compute the current market value of all open positions using the last known
+// prices stored in `localPrices`.  If a symbol does not have a known price
+// the position is treated as worthless for equity purposes.
+function computePositionsValue() {
+  let total = 0;
+  for (const [sym, qty] of Object.entries(localPositions)) {
+    const price = localPrices[sym] != null ? localPrices[sym] : 0;
+    const nQty = Number(qty) || 0;
+    total += (Number(price) || 0) * nQty;
+  }
+  return total;
+}
+
+// Render the snapshot (cash, positions and equity) from the local simulation
+// state.  This does not call the backend; instead it derives values from
+// `localCash`, `localPositions` and `localPrices`.
+function renderSnapshotFromLocal() {
+  const positionsValue = computePositionsValue();
+  const equity = localCash + positionsValue;
+  el.snapCash.textContent = fmtUSD(localCash);
+  el.snapPositions.textContent = fmtUSD(positionsValue);
+  el.snapEquity.textContent = fmtUSD(equity);
+}
+
 /* -------------------- Loaders -------------------- */
 
 async function loadPerformance(range = "1M") {
@@ -131,11 +203,15 @@ async function loadPerformance(range = "1M") {
 async function loadSnapshot() {
   try {
     const s = await getJSON(`${API_BASE}/api/account/snapshot`);
-    el.snapEquity.textContent = fmtUSD(s?.equity ?? 0);
-    el.snapCash.textContent = fmtUSD(s?.cash ?? 0);
-    el.snapPositions.textContent = fmtUSD(s?.positions ?? 0);
+    // Initialize local cash from backend snapshot when available
+    if (s && typeof s.cash === "number") {
+      localCash = Number(s.cash);
+    }
+    // Do not overwrite localPositions since backend doesn’t provide per-symbol details
+    renderSnapshotFromLocal();
   } catch (e) {
     console.warn("loadSnapshot failed:", e.message);
+    renderSnapshotFromLocal();
   }
 }
 
@@ -145,41 +221,63 @@ async function loadWatchlist() {
     const res = await getJSON(`${API_BASE}/api/watchlist`);
     const list = Array.isArray(res) ? res : res?.watchlist ?? res?.items ?? [];
     if (!list.length) throw new Error("empty list");
-
-    // Fetch prices for those symbols
-    const symbols = list.map((x) => x.symbol || x).join(",");
-    const prices = await getJSON(`${API_BASE}/api/prices?symbols=${encodeURIComponent(symbols)}`);
-
-    renderWatchlist(
-      list.map((it) => {
-        const sym = it.symbol || it;
-        const p = prices?.[sym]?.price ?? prices?.[sym] ?? null;
-        const change = prices?.[sym]?.changePct ?? null;
-        return { symbol: sym, price: p, changePct: change };
-      })
-    );
-
+    // Extract symbols as uppercase
+    const symbols = list.map((x) => (x.symbol || x).toUpperCase());
+    // Attempt to fetch prices from backend
+    let priceData = {};
+    try {
+      const resPrices = await getJSON(`${API_BASE}/api/prices?symbols=${encodeURIComponent(symbols.join(","))}`);
+      priceData = resPrices || {};
+    } catch (e) {
+      priceData = {};
+    }
+    const items = [];
+    for (const sym of symbols) {
+      let price = null;
+      let change = null;
+      const info = priceData?.[sym] ?? {};
+      if (info && typeof info === "object") {
+        price = info.price != null ? info.price : null;
+        change = info.changePct != null ? info.changePct : null;
+      } else if (typeof info === "number") {
+        price = info;
+      }
+      // Fallback to external API if no price from backend
+      if (price == null || isNaN(price)) {
+        try {
+          price = await getPrice(sym);
+        } catch (e) {
+          price = null;
+        }
+      }
+      if (price != null && !isNaN(price)) {
+        localPrices[sym] = Number(price);
+      }
+      items.push({ symbol: sym, price: price != null && !isNaN(price) ? price : null, changePct: change });
+    }
+    renderWatchlist(items);
     // Fill datalist for manual trading convenience
     el.symbolsList.innerHTML = "";
-    list.forEach((it) => {
+    symbols.forEach((sym) => {
       const opt = document.createElement("option");
-      opt.value = it.symbol || it;
+      opt.value = sym;
       el.symbolsList.appendChild(opt);
     });
+    // Update local snapshot to reflect any price changes for positions
+    renderSnapshotFromLocal();
   } catch (e) {
     console.warn("loadWatchlist failed:", e.message);
     // Fallback defaults
-    const fallback = ["BTC/USD", "ETH/USD", "SOL/USD", "DOT/USD", "DOGE/USD"].map((s) => ({
-      symbol: s,
-      price: null,
-      changePct: null,
-    }));
+    const fallbackSymbols = ["BTC/USD", "ETH/USD", "SOL/USD", "DOT/USD", "DOGE/USD"];
+    const fallback = fallbackSymbols.map((s) => ({ symbol: s, price: null, changePct: null }));
     renderWatchlist(fallback);
-    fallback.forEach((it) => {
+    el.symbolsList.innerHTML = "";
+    fallbackSymbols.forEach((s) => {
       const opt = document.createElement("option");
-      opt.value = it.symbol;
+      opt.value = s;
       el.symbolsList.appendChild(opt);
     });
+    renderSnapshotFromLocal();
   }
 }
 
@@ -201,11 +299,14 @@ function renderWatchlist(items) {
 async function loadTradeLog() {
   try {
     const res = await getJSON(`${API_BASE}/api/trades`);
-    const trades = Array.isArray(res) ? res : res?.trades ?? [];
-    renderTradeLog(trades);
+    const serverTrades = Array.isArray(res) ? res : res?.trades ?? [];
+    // Merge server trades with local trades.  Server trades come first
+    const combined = [...serverTrades, ...localTrades];
+    renderTradeLog(combined);
   } catch (e) {
     console.warn("loadTradeLog failed:", e.message);
-    el.tradeLogBody.innerHTML = "";
+    // Render local trades when server fetch fails
+    renderTradeLog([...localTrades]);
   }
 }
 
@@ -277,10 +378,11 @@ function updateManualEstimate() {
       return;
     }
     try {
-      const data = await getJSON(`${API_BASE}/api/prices?symbols=${encodeURIComponent(symbol)}`);
-      const info = data?.[symbol] ?? {};
-      const price = info.price != null ? info.price : (typeof info === "number" ? info : null);
+      // Use our helper to fetch price from backend or fallback
+      const price = await getPrice(symbol);
       if (price != null && !isNaN(price)) {
+        // Update local price cache
+        localPrices[symbol] = Number(price);
         const cost = price * qty;
         output.textContent = `Est. Price: ${fmtUSD(price)} | Est. Cost: ${fmtUSD(cost)}`;
       } else {
@@ -306,53 +408,66 @@ el.manualTradeForm.addEventListener("submit", async (e) => {
     return;
   }
   try {
-    // Before placing a BUY trade, verify sufficient cash based on latest price
+    // Always fetch latest price via helper
+    const price = await getPrice(symbol);
+    if (price == null || isNaN(price)) {
+      toast("Price unavailable for validation", "warn");
+      return;
+    }
+    // Update local price cache
+    localPrices[symbol] = Number(price);
+    const cost = price * qty;
+    // Validate available funds and holdings using local state
     if (side === "BUY") {
-      try {
-        const priceData = await getJSON(
-          `${API_BASE}/api/prices?symbols=${encodeURIComponent(symbol)}`
-        );
-        const info = priceData?.[symbol] ?? {};
-        const price = info.price != null ? info.price : (typeof info === "number" ? info : null);
-        if (price == null || isNaN(price)) {
-          toast("Price unavailable for validation", "warn");
-        } else {
-          const snapshot = await getJSON(`${API_BASE}/api/account/snapshot`);
-          const cash = Number(snapshot?.cash ?? 0);
-          const cost = price * qty;
-          if (cost > cash) {
-            toast(
-              `Not enough cash: need ${fmtUSD(cost)}, have ${fmtUSD(cash)}`,
-              "error"
-            );
-            return;
-          }
-        }
-      } catch (err) {
-        // if validation fails silently, allow backend to decide
+      if (cost > localCash) {
+        toast(`Not enough cash: need ${fmtUSD(cost)}, have ${fmtUSD(localCash)}`, "error");
+        return;
+      }
+    } else if (side === "SELL") {
+      const posQty = Number(localPositions[symbol] || 0);
+      if (qty > posQty) {
+        toast(`Not enough ${symbol} to sell: have ${posQty}, need ${qty}`, "error");
+        return;
       }
     }
-    // /api/trade expects query parameters rather than a JSON body
+    // Send trade to backend using query parameters; ignore errors as backend does not persist trades
     const url = `${API_BASE}/api/trade?symbol=${encodeURIComponent(symbol)}&side=${encodeURIComponent(side)}&quantity=${encodeURIComponent(qty)}`;
-    await withTimeout(
-      fetch(url, {
-        method: "POST",
-        headers: { Accept: "application/json" },
-      })
-    );
-    toast(`${side} ${qty} ${symbol} sent`);
+    try {
+      await withTimeout(
+        fetch(url, {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        }),
+        5000
+      );
+    } catch (err) {
+      // ignore
+    }
+    // Record trade locally
+    const timestamp = new Date().toISOString().replace("T", " ").split(".")[0];
+    localTrades.push({ time: timestamp, symbol, side, qty, price });
+    // Update local cash and positions
+    if (side === "BUY") {
+      localCash -= cost;
+      localPositions[symbol] = (Number(localPositions[symbol]) || 0) + qty;
+    } else {
+      localCash += cost;
+      localPositions[symbol] = (Number(localPositions[symbol]) || 0) - qty;
+    }
+    // Clear input and estimate
     el.manualQty.value = "";
-    // refresh UI pieces
-    await Promise.all([
-      loadSnapshot(),
-      loadPerformance(currentRange),
-      loadTradeLog(),
-      loadWatchlist(),
-    ]);
-    // Clear estimate after trade
     document.getElementById("manualEst").textContent = "";
-  } catch (e2) {
-    toast(`Trade failed: ${e2.message}`, "error");
+    toast(`${side} ${qty} ${symbol} executed at ${fmtUSD(price)}`);
+    // Update UI from local state
+    renderSnapshotFromLocal();
+    renderTradeLog([...localTrades]);
+    // Refresh watchlist and performance to update prices and chart
+    await Promise.all([
+      loadWatchlist(),
+      loadPerformance(currentRange),
+    ]);
+  } catch (err) {
+    toast(`Trade failed: ${err.message}`, "error");
   }
 });
 
