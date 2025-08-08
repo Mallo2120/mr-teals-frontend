@@ -41,6 +41,7 @@ const el = {
   themeToggle: document.getElementById('themeToggle'),
   addSymbolInput: document.getElementById('addSymbolInput'),
   addSymbolButton: document.getElementById('addSymbolButton')
+  , tradeLog: document.getElementById('tradeLog')
 };
 
 // Timer for periodic updates when bot is running
@@ -60,6 +61,7 @@ function startUpdates() {
     const range = activeChip ? activeChip.dataset.range : '1M';
     loadEquity(range);
     loadWatchlist();
+    loadTradeLog();
   }, 5000);
 }
 
@@ -149,6 +151,9 @@ function generateSeries(points=240, startVal=10000, drift=0.02, vol=0.8) {
 }
 function rangeToPoints(range) {
   switch(range) {
+    case '5m':
+    case '5M':
+      return 30; // 30 points for 5 minutes (approx one point every 10 seconds)
     case '1D': return 288; // 5 min
     case '1W': return 7*96; // 15 min
     case '1M': return 900;
@@ -378,6 +383,50 @@ function renderWatchlist(items) {
 }
 
 /* --------------------------------------------------------------------------
+   Trade Log
+--------------------------------------------------------------------------- */
+function fakeTradeLog() {
+  const symbols = ['BTC/USD','ETH/USD','SOL/USD'];
+  const sides = ['BUY','SELL'];
+  return Array.from({ length: 10 }, () => {
+    return {
+      time: new Date(Date.now() - Math.random()*300000).toISOString().slice(0,19).replace('T',' '),
+      symbol: symbols[Math.floor(Math.random()*symbols.length)],
+      side: sides[Math.floor(Math.random()*sides.length)],
+      qty: (Math.random()*0.5 + 0.1).toFixed(3),
+      price: (Math.random()*50000 + 1000).toFixed(2)
+    };
+  });
+}
+async function loadTradeLog() {
+  let trades;
+  try {
+    const res = await getJSON(`${API_BASE}/api/trades`);
+    trades = Array.isArray(res) ? res : res?.items;
+    if(!trades || !trades.length) throw new Error('empty');
+  } catch {
+    trades = fakeTradeLog();
+    // show toast only during preview mode (not necessary)
+  }
+  renderTradeLog(trades);
+}
+function renderTradeLog(trades) {
+  el.tradeLog.innerHTML = '';
+  trades.forEach(tr => {
+    const li = document.createElement('li');
+    const sideClass = tr.side.toUpperCase() === 'BUY' ? 'side-buy' : 'side-sell';
+    li.innerHTML = `
+      <span>${tr.time}</span>
+      <span>${tr.symbol}</span>
+      <span class="${sideClass}">${tr.side}</span>
+      <span>${tr.qty}</span>
+      <span>$${Number(tr.price).toLocaleString()}</span>
+    `;
+    el.tradeLog.appendChild(li);
+  });
+}
+
+/* --------------------------------------------------------------------------
    Crypto Modal
 --------------------------------------------------------------------------- */
 let currentSymbol = null;
@@ -566,6 +615,33 @@ el.addSymbolButton.addEventListener('click', async (e) => {
 --------------------------------------------------------------------------- */
 async function boot() {
   loadSettings();
-  await Promise.all([loadPerformance(), loadSnapshot(), loadEquity('1M'), loadWatchlist()]);
+  await Promise.all([
+    loadPerformance(),
+    loadSnapshot(),
+    loadEquity('1M'),
+    loadWatchlist(),
+    loadTradeLog()
+  ]);
 }
 document.addEventListener('DOMContentLoaded', boot);
+// Custom tooltip handling for settings inputs
+document.addEventListener('DOMContentLoaded', () => {
+  const tooltipEl = document.getElementById('customTooltip');
+  document.querySelectorAll('input').forEach(inp => {
+    const tip = inp.getAttribute('title');
+    if(!tip) return;
+    inp.addEventListener('mouseenter', (e) => {
+      tooltipEl.textContent = tip;
+      tooltipEl.style.display = 'block';
+      tooltipEl.style.left = `${e.pageX + 10}px`;
+      tooltipEl.style.top = `${e.pageY + 10}px`;
+    });
+    inp.addEventListener('mousemove', (e) => {
+      tooltipEl.style.left = `${e.pageX + 10}px`;
+      tooltipEl.style.top = `${e.pageY + 10}px`;
+    });
+    inp.addEventListener('mouseleave', () => {
+      tooltipEl.style.display = 'none';
+    });
+  });
+});

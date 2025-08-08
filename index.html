@@ -61,6 +61,7 @@
         <div class="range-chips">
           <button class="chip" data-range="1D">1D</button>
           <button class="chip" data-range="1W">1W</button>
+          <button class="chip" data-range="5m">5m</button>
           <button class="chip active" data-range="1M">1M</button>
           <button class="chip" data-range="3M">3M</button>
           <button class="chip" data-range="YTD">YTD</button>
@@ -105,6 +106,13 @@
           <button id="addSymbolButton" class="add-symbol-btn">Add</button>
         </div>
       </div>
+      <!-- Trade Log -->
+      <div class="card trade-log-card">
+        <div class="card-title">Trade Log</div>
+        <div class="trade-log-container">
+          <ul id="tradeLog" class="trade-log-list"></ul>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -139,7 +147,10 @@
     </div>
   </div>
 
+  <!-- Custom tooltip -->
+  <div id="customTooltip" class="custom-tooltip"></div>
   <!-- Scripts -->
   <script src="app.js"></script>
 </body>
+</html>
 </html>

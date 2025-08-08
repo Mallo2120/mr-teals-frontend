@@ -191,6 +191,49 @@ body {
 .add-symbol-btn:hover {
   opacity: 0.85;
 }
+
+/* Trade log styles */
+.trade-log-container {
+  max-height: 200px;
+  overflow-y: auto;
+}
+.trade-log-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+}
+.trade-log-list li {
+  display: grid;
+  grid-template-columns: 3fr 2fr 1fr 1fr 2fr;
+  gap: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #1d2d38;
+  font-size: 0.78rem;
+}
+.trade-log-list li:last-child {
+  border-bottom: none;
+}
+.trade-log-list .side-buy {
+  color: #2ecc71;
+}
+.trade-log-list .side-sell {
+  color: var(--negative);
+}
+
+/* Custom tooltip */
+.custom-tooltip {
+  position: absolute;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 0.4rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 999;
+  max-width: 250px;
+  display: none;
+}
 .range-chips {
   display: flex;
   flex-wrap: wrap;
