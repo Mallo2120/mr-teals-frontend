@@ -306,7 +306,14 @@ el.manualTradeForm.addEventListener("submit", async (e) => {
     return;
   }
   try {
-    await postJSON(`${API_BASE}/api/trade`, { symbol, side, qty });
+    // /api/trade expects query parameters rather than a JSON body
+    const url = `${API_BASE}/api/trade?symbol=${encodeURIComponent(symbol)}&side=${encodeURIComponent(side)}&quantity=${encodeURIComponent(qty)}`;
+    await withTimeout(
+      fetch(url, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      })
+    );
     toast(`${side} ${qty} ${symbol} sent`);
     el.manualQty.value = "";
     // refresh UI pieces
