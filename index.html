@@ -23,7 +23,12 @@
     <div class="metric"><div class="metric-label">Cash</div><div id="cashVal" class="metric-value">$0.00</div></div>
     <div class="metric"><div class="metric-label">Positions</div><div id="positionsVal" class="metric-value">$0.00</div></div>
     <div class="add-cash">
-      <label>Starting Balance</label><small class="muted">Enter amount, then click Add</small>
+      <label>Add Starting Balance</label>
+      <div class="preset-amounts">
+        <button class="amount-btn" data-amt="1000">$1k</button>
+        <button class="amount-btn" data-amt="5000">$5k</button>
+        <button class="amount-btn" data-amt="10000">$10k</button>
+      </div>
       <div class="add-controls">
         <input id="customAdd" type="number" min="0" step="1" placeholder="Custom $" />
         <button id="addApplyBtn" class="btn add">Add</button>
@@ -35,6 +40,10 @@
     <section class="card">
       <div class="section-title">
         Live Prices <small id="priceStatus" class="muted">Connecting…</small>
+        <div class="watchlist-controls">
+          <input id="addSymbolInput" placeholder="Add symbol (e.g., TRX/USD)" />
+          <button id="addSymbolBtn" class="btn ghost small">+</button>
+        </div>
         <div class="live-controls">
           <label class="muted">Refresh:</label>
           <select id="refreshRate">
@@ -53,25 +62,18 @@
       <form id="tradeForm" class="trade-form" autocomplete="off">
         <label>Symbol
           <input id="tradeSymbol" list="symbolsList" placeholder="BTC/USD" />
-          <datalist id="symbolsList">
-            <option value="BTC/USD"></option><option value="ETH/USD"></option>
-            <option value="SOL/USD"></option><option value="DOT/USD"></option>
-            <option value="DOGE/USD"></option>
-          </datalist>
+          <datalist id="symbolsList"></datalist>
         </label>
         <label>Side
           <select id="tradeSide"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
         </label>
         <label>Quantity
           <div class="qty-row">
-            <input id="tradeQty" type="number" step="any" min="0.0001" placeholder="0.01" />
-            <button id="maxQtyBtn" type="button" class="btn ghost small" title="Use max based on cash (BUY) or holdings (SELL)">Max</button>
+            <input id="tradeQty" type="number" step="any" min="0.000001" placeholder="0.01" />
+            <button id="maxQtyBtn" type="button" class="btn ghost small">Max</button>
           </div>
         </label>
-        <div class="est">
-          <div>Est. Price: <span id="estPrice">—</span></div>
-          <div>Est. Cost: <span id="estCost">—</span></div>
-        </div>
+        <div class="est"><div>Est. Price: <span id="estPrice">—</span></div><div>Est. Cost: <span id="estCost">—</span></div></div>
         <div id="pnlPreview" class="pnl muted" hidden></div>
         <button class="btn primary" type="submit">Execute</button>
       </form>
@@ -81,14 +83,15 @@
     <section class="card span2">
       <div class="section-title">Equity Chart
         <div class="range-chips">
-          <button class="chip selected" data-range="1D">1D</button>
+          <button class="chip selected" data-range="LIVE">Live</button>
+          <button class="chip" data-range="1D">1D</button>
           <button class="chip" data-range="1W">1W</button>
           <button class="chip" data-range="1M">1M</button>
           <button class="chip" data-range="1Y">1Y</button>
           <button class="chip" data-range="ALL">ALL</button>
         </div>
       </div>
-      <canvas id="equityChart" height="120"></canvas>
+      <canvas id="equityChart" height="80"></canvas>
     </section>
 
     <section class="card span2">
