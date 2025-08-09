@@ -40,10 +40,6 @@
     <section class="card">
       <div class="section-title">
         Live Prices <small id="priceStatus" class="muted">Connecting…</small>
-        <div class="watchlist-controls">
-          <input id="addSymbolInput" placeholder="Add symbol (e.g., TRX/USD)" />
-          <button id="addSymbolBtn" class="btn ghost small">+</button>
-        </div>
         <div class="live-controls">
           <label class="muted">Refresh:</label>
           <select id="refreshRate">
@@ -62,18 +58,25 @@
       <form id="tradeForm" class="trade-form" autocomplete="off">
         <label>Symbol
           <input id="tradeSymbol" list="symbolsList" placeholder="BTC/USD" />
-          <datalist id="symbolsList"></datalist>
+          <datalist id="symbolsList">
+            <option value="BTC/USD"></option><option value="ETH/USD"></option>
+            <option value="SOL/USD"></option><option value="DOT/USD"></option>
+            <option value="DOGE/USD"></option>
+          </datalist>
         </label>
         <label>Side
           <select id="tradeSide"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
         </label>
         <label>Quantity
           <div class="qty-row">
-            <input id="tradeQty" type="number" step="any" min="0.000001" placeholder="0.01" />
-            <button id="maxQtyBtn" type="button" class="btn ghost small">Max</button>
+            <input id="tradeQty" type="number" step="any" min="0.0001" placeholder="0.01" />
+            <button id="maxQtyBtn" type="button" class="btn ghost small" title="Use max based on cash (BUY) or holdings (SELL)">Max</button>
           </div>
         </label>
-        <div class="est"><div>Est. Price: <span id="estPrice">—</span></div><div>Est. Cost: <span id="estCost">—</span></div></div>
+        <div class="est">
+          <div>Est. Price: <span id="estPrice">—</span></div>
+          <div>Est. Cost: <span id="estCost">—</span></div>
+        </div>
         <div id="pnlPreview" class="pnl muted" hidden></div>
         <button class="btn primary" type="submit">Execute</button>
       </form>
