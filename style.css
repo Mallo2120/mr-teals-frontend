@@ -33,3 +33,7 @@
 .amount-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:999px;cursor:pointer}
 .amount-btn.selected{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal) inset;color:#9fe5db}
 #equityChart{max-height:180px}
+
+.small{font-size:12px}
+.positive{color: var(--good)}
+.negative{color: var(--bad)}

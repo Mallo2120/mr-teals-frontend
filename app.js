@@ -6,6 +6,7 @@
   const $ = (s)=>document.querySelector(s);
   const el = {
     equity: $("#equityVal"), cash: $("#cashVal"), positions: $("#positionsVal"),
+    pnlToday: $("#pnlTodayVal"), unrealized: $("#unrealizedVal"),
     pricesList: $("#pricesList"), priceStatus: $("#priceStatus"), lastUpdated: $("#lastUpdated"),
     refreshRate: $("#refreshRate"),
     customAdd: $("#customAdd"), addApply: $("#addApplyBtn"),
@@ -20,6 +21,26 @@
   try { const raw = localStorage.getItem(LS_KEY); if (raw) state = JSON.parse(raw);} catch {}
 
   const prices = new Map(); // symbol -> {price, ts, stale}
+  const todayKey = ()=>{ const d=new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
+  function unrealizedPnL(){ 
+    let sum=0; 
+    for(const [sym,qty] of Object.entries(state.positions)){
+      const p = prices.get(sym)?.price;
+      const ac = state.positionsMeta?.[sym]?.avg ?? null;
+      if(p!=null && ac!=null) sum += (p-ac)*qty;
+    }
+    return sum;
+  }
+  function renderPnL(){ 
+    const r = state.realized?.[todayKey()] || 0;
+    const u = unrealizedPnL();
+    const t = r + u;
+    el.unrealized.textContent = fmtUSD(u);
+    el.pnlToday.textContent = fmtUSD(t);
+    el.pnlToday.classList.remove('positive','negative');
+    el.pnlToday.classList.add(t>=0?'positive':'negative');
+  }
+
 
   const fmtUSD = (n) => { const v=Math.abs(Number(n)||0); const sign=Number(n)<0? "-" : ""; return `${sign}$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`; };
   const nowTime = ()=> new Date().toLocaleTimeString();
@@ -88,7 +109,7 @@
     }
     el.priceStatus.textContent = ok ? "Live" : "Stale";
     el.lastUpdated.textContent = ok ? `Updated: ${nowTime()}` : "";
-    renderPrices(); renderSnapshot(); recordEquityPoint(); if(currentRange==="LIVE") renderChart(); updateEstimate();
+    renderPrices(); renderPnL(); renderSnapshot(); renderPnL(); recordEquityPoint(); if(currentRange==="LIVE") renderChart(); updateEstimate();
   }
 
   const getPrice = (sym)=> prices.get(sym)?.price ?? null;
@@ -146,11 +167,11 @@
       state.positions[sym] = newQty;
       if (newQty <= 1e-12){ delete state.positions[sym]; delete state.positionsMeta[sym]; }
       state.trades.unshift({time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty, pnl});
-      save(); renderSnapshot(); renderTrades(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
+      save(); renderSnapshot(); renderPnL(); renderTrades(); renderPnL(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
       updateEstimate(); recordEquityPoint(); renderChart(); return;
     }
     state.trades.unshift({time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty});
-    save(); renderSnapshot(); renderTrades(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
+    save(); renderSnapshot(); renderPnL(); renderTrades(); renderPnL(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
   }
 
   function renderTrades(){
@@ -194,7 +215,7 @@
   });
   el.addApply.addEventListener("click", ()=>{
     const amt = (selectedPreset ?? Number(el.customAdd.value));
-    if(amt>0){ state.cash += amt; save(); toast(`Added ${fmtUSD(amt)} starting balance`); el.customAdd.value=""; document.querySelectorAll(".amount-btn").forEach(b=>b.classList.remove("selected")); selectedPreset=null; renderSnapshot(); recordEquityPoint(); renderChart(); }
+    if(amt>0){ state.cash += amt; save(); toast(`Added ${fmtUSD(amt)} starting balance`); el.customAdd.value=""; document.querySelectorAll(".amount-btn").forEach(b=>b.classList.remove("selected")); selectedPreset=null; renderSnapshot(); renderPnL(); recordEquityPoint(); renderChart(); }
   });
 
   el.tSymbol.addEventListener("input", updateEstimate);
@@ -229,12 +250,12 @@
 
   el.reset.addEventListener("click", ()=>{
     state = { cash:0, positions:{}, trades:[], positionsMeta:{} };
-    save(); renderTrades(); renderSnapshot(); equityHistory.length=0; recordEquityPoint(); renderChart(); toast("Simulation reset");
+    save(); renderTrades(); renderPnL(); renderSnapshot(); renderPnL(); equityHistory.length=0; recordEquityPoint(); renderChart(); toast("Simulation reset");
   });
 
   function boot(){
     SYMBOLS.forEach(sym=> prices.set(sym,{price:null, ts:null, stale:false}));
-    renderPrices(); renderTrades(); renderSnapshot(); updateEstimate(); buildChart(); recordEquityPoint(); renderChart();
+    renderPrices(); renderPnL(); renderTrades(); renderPnL(); renderSnapshot(); renderPnL(); updateEstimate(); buildChart(); recordEquityPoint(); renderChart();
     fetchPrices(); let pollMs = Number(el.refreshRate.value||2000); if(pollMs>0) setInterval(fetchPrices, pollMs);
   }
   document.addEventListener("DOMContentLoaded", boot);
