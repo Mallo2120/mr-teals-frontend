@@ -28,12 +28,3 @@
 /* qty + Max */ .qty-row{display:flex;gap:8px;align-items:center}.btn.small{padding:6px 10px;border-radius:10px;font-size:12px}
 /* PnL preview */ .pnl{margin-top:6px;font-size:12px}.pnl .pos{color:var(--good)}.pnl .neg{color:var(--bad)}
 @media (max-width:900px){.grid{grid-template-columns:1fr}.span2{grid-column:span 1}.strip{grid-template-columns:1fr 1fr}}
-
-.preset-amounts{display:flex;gap:6px;margin:6px 0 2px}
-.amount-btn{background:transparent;border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:999px;cursor:pointer}
-.amount-btn.selected{border-color:var(--teal);box-shadow:0 0 0 1px var(--teal) inset;color:#9fe5db}
-#equityChart{max-height:180px}
-
-.small{font-size:12px}
-.positive{color: var(--good)}
-.negative{color: var(--bad)}

@@ -23,12 +23,7 @@
     <div class="metric"><div class="metric-label">Cash</div><div id="cashVal" class="metric-value">$0.00</div></div>
     <div class="metric"><div class="metric-label">Positions</div><div id="positionsVal" class="metric-value">$0.00</div></div>
     <div class="add-cash">
-      <label>Add Starting Balance</label>
-      <div class="preset-amounts">
-        <button class="amount-btn" data-amt="1000">$1k</button>
-        <button class="amount-btn" data-amt="5000">$5k</button>
-        <button class="amount-btn" data-amt="10000">$10k</button>
-      </div>
+      <label>Starting Balance</label><small class="muted">Enter amount, then click Add</small>
       <div class="add-controls">
         <input id="customAdd" type="number" min="0" step="1" placeholder="Custom $" />
         <button id="addApplyBtn" class="btn add">Add</button>
@@ -86,15 +81,14 @@
     <section class="card span2">
       <div class="section-title">Equity Chart
         <div class="range-chips">
-          <button class="chip selected" data-range="LIVE">Live</button>
-          <button class="chip" data-range="1D">1D</button>
+          <button class="chip selected" data-range="1D">1D</button>
           <button class="chip" data-range="1W">1W</button>
           <button class="chip" data-range="1M">1M</button>
           <button class="chip" data-range="1Y">1Y</button>
           <button class="chip" data-range="ALL">ALL</button>
         </div>
       </div>
-      <canvas id="equityChart" height="80"></canvas>
+      <canvas id="equityChart" height="120"></canvas>
     </section>
 
     <section class="card span2">
