@@ -1,10 +1,9 @@
-/* Mr. Teals Phase 1.2 — Manual Trading (Fake Money, Live Prices with Fallback, Equity Chart) */
+/* Mr. Teals Phase 1.3 — Max button + P&L preview (same layout) */
 (() => {
   const SYMBOLS = ["BTC/USD","ETH/USD","SOL/USD","DOT/USD","DOGE/USD"];
   const CG_IDS = { "BTC/USD":"bitcoin","ETH/USD":"ethereum","SOL/USD":"solana","DOT/USD":"polkadot","DOGE/USD":"dogecoin" };
 
   const $ = (s)=>document.querySelector(s);
-  const $$ = (s)=>Array.from(document.querySelectorAll(s));
   const el = {
     equity: $("#equityVal"), cash: $("#cashVal"), positions: $("#positionsVal"),
     pricesList: $("#pricesList"), priceStatus: $("#priceStatus"), lastUpdated: $("#lastUpdated"),
@@ -12,26 +11,23 @@
     customAdd: $("#customAdd"), addApply: $("#addApplyBtn"),
     tradeForm: $("#tradeForm"), tSymbol: $("#tradeSymbol"), tSide: $("#tradeSide"), tQty: $("#tradeQty"),
     estPrice: $("#estPrice"), estCost: $("#estCost"), tradeError: $("#tradeError"),
+    pnlPreview: $("#pnlPreview"), maxQtyBtn: $("#maxQtyBtn"),
     tradeTable: $("#tradeTable"), reset: $("#resetBtn"), toastHost: $("#toastHost"),
   };
 
-  const LS_KEY = "mrteals.state.v1.2";
-  let state = { cash:0, positions:{}, trades:[] };
+  const LS_KEY = "mrteals.state.v1.3";
+  let state = { cash:0, positions:{}, trades:[], positionsMeta:{} };
   try { const raw = localStorage.getItem(LS_KEY); if (raw) state = JSON.parse(raw);} catch {}
+
   const prices = new Map(); // symbol -> {price, ts, stale}
 
-  // Track which preset starting balance button (e.g. $1k/$5k/$10k) is currently selected. When a user
-  // clicks a preset, this variable stores the numeric amount so the Add button knows what to apply.
-  // It is cleared after adding or when the user clicks a different preset. If null, no preset is selected.
-  let selectedPreset = null;
-
-  const fmtUSD = (n) => {
-    const v = Math.abs(Number(n) || 0); const sign = Number(n) < 0 ? "-" : "";
-    return `${sign}$${v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}`;
-  };
+  const fmtUSD = (n) => { const v=Math.abs(Number(n)||0); const sign=Number(n)<0? "-" : ""; return `${sign}$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`; };
   const nowTime = ()=> new Date().toLocaleTimeString();
   const toast = (m)=>{ const t=document.createElement("div"); t.className="toast"; t.textContent=m; el.toastHost.appendChild(t); setTimeout(()=>t.remove(),2500); };
   const save = ()=> localStorage.setItem(LS_KEY, JSON.stringify(state));
+
+  const holding = (sym)=> state.positions[sym] || 0;
+  const avgCost = (sym)=> state.positionsMeta?.[sym]?.avg ?? null;
 
   const computePositionsValue = ()=> Object.entries(state.positions).reduce((sum,[sym,qty])=>{
     const p = prices.get(sym)?.price; return sum + (p? p*qty:0);
@@ -55,8 +51,7 @@
   }
 
   async function fetchCoinbaseSpot(sym){
-    // Coinbase expects "ETH-USD" etc
-    const pair = sym.replace("/","-").replace("DOGE","DOGE").replace("DOT","DOT");
+    const pair = sym.replace("/","-");
     const url = `https://api.coinbase.com/v2/prices/${pair}/spot`;
     const r = await fetch(url,{cache:"no-store"});
     const j = await r.json();
@@ -66,7 +61,6 @@
   }
 
   async function fetchPrices(){
-    // Try CoinGecko batch first
     const ids = Object.values(CG_IDS).join(",");
     const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
     let ok = false;
@@ -81,50 +75,44 @@
           prices.set(sym,{price, ts:Date.now(), stale:false});
           ok = true;
         }else{
-          // mark for fallback
           prices.set(sym,{...(prices.get(sym)||{}), stale:true});
         }
       }
-    }catch(e){
-      // cg failed, fall through to fallback
-    }
-
-    // Fallback for any stale/empty using Coinbase
+    }catch{}
     for(const sym of SYMBOLS){
       const entry = prices.get(sym);
       if(!entry || entry.stale || entry.price == null){
-        try{
-          const p = await fetchCoinbaseSpot(sym);
-          prices.set(sym,{price:p, ts:Date.now(), stale:false});
-          ok = true;
-        }catch(e){
-          const prev = prices.get(sym)||{};
-          prices.set(sym,{...prev, stale:true});
-        }
+        try{ prices.set(sym,{price: await fetchCoinbaseSpot(sym), ts:Date.now(), stale:false}); ok = true; }
+        catch{ prices.set(sym,{...(prices.get(sym)||{}), stale:true}); }
       }
     }
-
     el.priceStatus.textContent = ok ? "Live" : "Stale";
     el.lastUpdated.textContent = ok ? `Updated: ${nowTime()}` : "";
-    renderPrices();
-    renderSnapshot();
-    // Record a new equity point whenever prices update so the history stays current.
-    recordEquityPoint();
-    // Only update the chart automatically when the user has selected the LIVE range. For other
-    // ranges, the chart will update when the range chip is clicked or a trade occurs.
-    if(currentRange === "LIVE"){
-      renderChart();
-    }
-    updateEstimate();
+    renderPrices(); renderSnapshot(); recordEquityPoint(); renderChart(); updateEstimate();
   }
 
   const getPrice = (sym)=> prices.get(sym)?.price ?? null;
+
   function updateEstimate(){
     const sym = (el.tSymbol.value||"").toUpperCase().trim();
     const qty = Number(el.tQty.value);
     const p = getPrice(sym);
     el.estPrice.textContent = p? fmtUSD(p): "—";
     el.estCost.textContent = (p && qty>0)? fmtUSD(p*qty): "—";
+
+    // P&L preview for SELL
+    el.pnlPreview.hidden = true;
+    if (p && qty>0 && el.tSide.value === "SELL"){
+      const ac = avgCost(sym);
+      const proceeds = p * qty;
+      if (ac != null){
+        const pnl = (p - ac) * qty;
+        const pct = ac ? ((p-ac)/ac)*100 : 0;
+        const cls = pnl >= 0 ? 'pos' : 'neg';
+        el.pnlPreview.innerHTML = `If sell ${qty} ${sym}: Proceeds <b>${fmtUSD(proceeds)}</b> · P/L <b class="${cls}">${fmtUSD(pnl)}</b> (${pct.toFixed(2)}%)`;
+        el.pnlPreview.hidden = false;
+      }
+    }
   }
 
   function canBuy(sym, qty){
@@ -133,16 +121,38 @@
     return {ok:true};
   }
   function canSell(sym, qty){
-    const held = state.positions[sym]||0; if(qty > held + 1e-12) return {ok:false, reason:`Not enough holdings: have ${held}`};
+    const held = holding(sym); if(qty > held + 1e-12) return {ok:false, reason:`Not enough holdings: have ${held}`};
     return {ok:true};
   }
+
   function executeTrade(sym, side, qty){
     const p = getPrice(sym); if(!p) throw new Error("Price unavailable");
-    if(side==="BUY"){ const v=canBuy(sym, qty); if(!v.ok) throw new Error(v.reason); state.cash -= p*qty; state.positions[sym]=(state.positions[sym]||0)+qty; }
-    else { const v=canSell(sym, qty); if(!v.ok) throw new Error(v.reason); state.cash += p*qty; state.positions[sym]=(state.positions[sym]||0)-qty; if(state.positions[sym]<1e-12) delete state.positions[sym]; }
+    if(side==="BUY"){
+      const v=canBuy(sym, qty); if(!v.ok) throw new Error(v.reason);
+      state.cash -= p*qty;
+      const prevQty = holding(sym);
+      const prevAvg = avgCost(sym) ?? p;
+      const newQty = prevQty + qty;
+      const newAvg = newQty > 0 ? ((prevAvg*prevQty) + (p*qty)) / newQty : p;
+      state.positions[sym] = newQty;
+      state.positionsMeta[sym] = { avg: newAvg };
+    } else {
+      const v=canSell(sym, qty); if(!v.ok) throw new Error(v.reason);
+      state.cash += p*qty;
+      const prevQty = holding(sym);
+      const ac = avgCost(sym) ?? p;
+      const newQty = prevQty - qty;
+      const pnl = (p - ac) * qty;
+      state.positions[sym] = newQty;
+      if (newQty <= 1e-12){ delete state.positions[sym]; delete state.positionsMeta[sym]; }
+      state.trades.unshift({time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty, pnl});
+      save(); renderSnapshot(); renderTrades(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
+      updateEstimate(); recordEquityPoint(); renderChart(); return;
+    }
     state.trades.unshift({time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty});
     save(); renderSnapshot(); renderTrades(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
   }
+
   function renderTrades(){
     el.tradeTable.innerHTML = "";
     state.trades.forEach(tr=>{
@@ -153,9 +163,7 @@
   }
 
   // Chart + refresh control
-  // Default to the "LIVE" range so the chart updates in real time by default. The currentRange
-  // variable is updated when the user clicks a range chip.
-  let pollMs = 2000, pollTimer=null; const equityHistory=[]; let chart, currentRange="LIVE";
+  let pollMs = 2000, pollTimer=null; const equityHistory=[]; let chart, currentRange="1D";
   function recordEquityPoint(){ const eq = state.cash + computePositionsValue(); equityHistory.push({t:Date.now(), v:eq}); const cutoff=Date.now()-7*24*60*60*1000; while(equityHistory.length && equityHistory[0].t<cutoff) equityHistory.shift(); }
   function startPoll(){ if(pollTimer) clearInterval(pollTimer); if(pollMs>0) pollTimer=setInterval(fetchPrices, pollMs); }
   el.refreshRate.addEventListener("change", ()=>{ pollMs = Number(el.refreshRate.value); startPoll(); if(pollMs>0) fetchPrices(); });
@@ -166,11 +174,8 @@
       options:{ animation:false, responsive:true, scales:{ x:{ticks:{color:"#9db2b2"}, grid:{color:"#24303a"}}, y:{ticks:{color:"#9db2b2"}, grid:{color:"#24303a"}} }, plugins:{legend:{display:false}} } });
   }
   function renderChart(){
-    if(!chart) return; const now=Date.now();
-    // Define time windows for chart ranges. LIVE behaves like ALL (no window) but is included
-    // explicitly for clarity.
-    const win={ LIVE:Infinity, "1D":86400000,"1W":604800000,"1M":2592000000,"1Y":31536000000,"ALL":Infinity }[currentRange];
-    const slice = equityHistory.filter(p => currentRange==="ALL" || currentRange==="LIVE" || (now-p.t)<=win);
+    if(!chart) return; const now=Date.now(); const win={ "1D":86400000,"1W":604800000,"1M":2592000000,"1Y":31536000000,"ALL":Infinity }[currentRange];
+    const slice = equityHistory.filter(p => currentRange==="ALL" || (now-p.t)<=win);
     chart.data.labels = slice.map(p=> new Date(p.t).toLocaleTimeString());
     chart.data.datasets[0].data = slice.map(p=> p.v);
     chart.update();
@@ -178,33 +183,28 @@
   document.addEventListener("click", (e)=>{ const b=e.target.closest(".chip"); if(!b) return; document.querySelectorAll(".chip").forEach(c=>c.classList.remove("selected")); b.classList.add("selected"); currentRange=b.dataset.range; renderChart(); });
 
   // Events
-  // Handle Add starting balance. If a preset button is selected, use its amount; otherwise use the
-  // custom input. After applying, clear the selection and input.
   el.addApply.addEventListener("click", ()=>{
-    let amt = 0;
-    // Use preset if selected
-    if(selectedPreset && Number.isFinite(selectedPreset)){
-      amt = selectedPreset;
-    } else {
-      amt = Number(el.customAdd.value);
-    }
-    if(amt>0){
-      state.cash += amt;
-      save();
-      toast(`Added ${fmtUSD(amt)} starting balance`);
-      // Clear custom input and preset selection
-      el.customAdd.value = "";
-      selectedPreset = null;
-      document.querySelectorAll('.amount-btn').forEach(btn=>btn.classList.remove('selected'));
-      renderSnapshot();
-      recordEquityPoint();
-      renderChart();
-    }
+    const amt = Number(el.customAdd.value);
+    if(amt>0){ state.cash += amt; save(); toast(`Added ${fmtUSD(amt)} starting balance`); el.customAdd.value=""; renderSnapshot(); recordEquityPoint(); renderChart(); }
   });
 
   el.tSymbol.addEventListener("input", updateEstimate);
   el.tQty.addEventListener("input", updateEstimate);
   el.tSide.addEventListener("change", updateEstimate);
+
+  // Max button
+  el.maxQtyBtn.addEventListener("click", ()=>{
+    const sym = (el.tSymbol.value||"").toUpperCase().trim();
+    const p = getPrice(sym); if (!sym || !p) return;
+    if (el.tSide.value === "BUY"){
+      const maxQty = Math.max(0, Math.floor((state.cash / p) * 1e6) / 1e6);
+      el.tQty.value = maxQty > 0 ? String(maxQty) : "";
+    } else {
+      const hold = holding(sym);
+      el.tQty.value = hold > 0 ? String(hold) : "";
+    }
+    updateEstimate();
+  });
 
   el.tradeForm.addEventListener("submit", (e)=>{
     e.preventDefault();
@@ -219,28 +219,14 @@
   });
 
   el.reset.addEventListener("click", ()=>{
-    state = { cash:0, positions:{}, trades:[] };
+    state = { cash:0, positions:{}, trades:[], positionsMeta:{} };
     save(); renderTrades(); renderSnapshot(); equityHistory.length=0; recordEquityPoint(); renderChart(); toast("Simulation reset");
   });
 
   function boot(){
     SYMBOLS.forEach(sym=> prices.set(sym,{price:null, ts:null, stale:false}));
     renderPrices(); renderTrades(); renderSnapshot(); updateEstimate(); buildChart(); recordEquityPoint(); renderChart();
-    fetchPrices();
-    pollMs = Number(el.refreshRate.value||2000);
-    if(pollMs>0) startPoll();
-    // Setup preset starting balance buttons. When clicked, they highlight and set selectedPreset.
-    document.querySelectorAll('.amount-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        // Clear any previous selection
-        document.querySelectorAll('.amount-btn').forEach(b=>b.classList.remove('selected'));
-        // Set the selected preset and highlight
-        selectedPreset = Number(btn.dataset.amt);
-        btn.classList.add('selected');
-        // Clear custom input so it doesn't conflict
-        el.customAdd.value = '';
-      });
-    });
+    fetchPrices(); let pollMs = Number(el.refreshRate.value||2000); if(pollMs>0) setInterval(fetchPrices, pollMs);
   }
   document.addEventListener("DOMContentLoaded", boot);
 })();
