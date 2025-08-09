@@ -1,198 +1,516 @@
-/* Mr. Teals Phase 1.2 — Manual Trading (Fake Money, Live Prices with Fallback, Equity Chart) */
+// Mr. Teals paper trading dashboard (Phase 1.2)
+//
+// This script implements a fully client‑side fake trading simulator. It
+// maintains a local cash balance, positions, trade history and live prices.
+// Prices are fetched periodically from CoinGecko with a fallback to Coinbase
+// when values are missing. An equity chart tracks your account value over
+// time with range selectors (Live, 1D, 1W, 1M, 1Y, ALL). The chart only
+// updates every few seconds when the Live range is selected.
+
 (() => {
-  const SYMBOLS = ["BTC/USD","ETH/USD","SOL/USD","DOT/USD","DOGE/USD"];
-  const CG_IDS = { "BTC/USD":"bitcoin","ETH/USD":"ethereum","SOL/USD":"solana","DOT/USD":"polkadot","DOGE/USD":"dogecoin" };
+  /* ---------------------------------------------------------------------
+   * Configuration
+   *
+   * SYMBOLS: the set of pairs available for trading. Only these symbols will
+   * appear in the live price list and dropdown. To add more, add the
+   * appropriate key/value to COINGECKO_MAP and COINBASE_MAP below.
+   */
+  const SYMBOLS = ["BTC/USD", "ETH/USD", "SOL/USD", "DOT/USD", "DOGE/USD"];
 
-  const $ = (s)=>document.querySelector(s);
-  const $$ = (s)=>Array.from(document.querySelectorAll(s));
-  const el = {
-    equity: $("#equityVal"), cash: $("#cashVal"), positions: $("#positionsVal"),
-    pricesList: $("#pricesList"), priceStatus: $("#priceStatus"), lastUpdated: $("#lastUpdated"),
-    refreshRate: $("#refreshRate"),
-    customAdd: $("#customAdd"), addApply: $("#addApplyBtn"),
-    tradeForm: $("#tradeForm"), tSymbol: $("#tradeSymbol"), tSide: $("#tradeSide"), tQty: $("#tradeQty"),
-    estPrice: $("#estPrice"), estCost: $("#estCost"), tradeError: $("#tradeError"),
-    tradeTable: $("#tradeTable"), reset: $("#resetBtn"), toastHost: $("#toastHost"),
+  // Map base currencies to Coingecko IDs used by the simple price API.
+  const COINGECKO_MAP = {
+    BTC: "bitcoin",
+    ETH: "ethereum",
+    SOL: "solana",
+    DOT: "polkadot",
+    DOGE: "dogecoin",
   };
 
-  const LS_KEY = "mrteals.state.v1.2";
-  let state = { cash:0, positions:{}, trades:[] };
-  try { const raw = localStorage.getItem(LS_KEY); if (raw) state = JSON.parse(raw);} catch {}
-  const prices = new Map(); // symbol -> {price, ts, stale}
-
-  const fmtUSD = (n) => {
-    const v = Math.abs(Number(n) || 0); const sign = Number(n) < 0 ? "-" : "";
-    return `${sign}$${v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}`;
+  // Map base currencies to Coinbase product IDs for fallback price lookup.
+  const COINBASE_MAP = {
+    BTC: "BTC-USD",
+    ETH: "ETH-USD",
+    SOL: "SOL-USD",
+    DOT: "DOT-USD",
+    DOGE: "DOGE-USD",
   };
-  const nowTime = ()=> new Date().toLocaleTimeString();
-  const toast = (m)=>{ const t=document.createElement("div"); t.className="toast"; t.textContent=m; el.toastHost.appendChild(t); setTimeout(()=>t.remove(),2500); };
-  const save = ()=> localStorage.setItem(LS_KEY, JSON.stringify(state));
 
-  const computePositionsValue = ()=> Object.entries(state.positions).reduce((sum,[sym,qty])=>{
-    const p = prices.get(sym)?.price; return sum + (p? p*qty:0);
-  },0);
+  // Polling interval (in milliseconds) for live price updates. Changing this
+  // will affect how frequently prices and the chart update when the Live
+  // range is active.
+  const POLL_INTERVAL = 2000;
 
-  function renderSnapshot(){
-    const pos = computePositionsValue();
-    el.cash.textContent = fmtUSD(state.cash);
-    el.positions.textContent = fmtUSD(pos);
-    el.equity.textContent = fmtUSD(state.cash + pos);
+  /* ---------------------------------------------------------------------
+   * State
+   */
+  let localCash = 0; // available cash
+  let localPositions = {}; // positions keyed by symbol (e.g. { 'ETH/USD': 2.5 })
+  let localTrades = []; // executed trades (for rendering the log)
+  let localPrices = {}; // last known USD price per symbol (e.g. { 'BTC/USD': 50000 })
+  let priceHistory = []; // array of { t: Date, v: Number } for equity history
+  let currentRange = "live"; // currently selected equity range
+  let priceTimer = null; // timer id for polling
+  let chart = null; // Chart.js instance
+
+  /* ---------------------------------------------------------------------
+   * DOM references
+   */
+  const refs = {
+    snapEquity: document.getElementById("snapEquity"),
+    snapCash: document.getElementById("snapCash"),
+    snapPositions: document.getElementById("snapPositions"),
+    startAmount: document.getElementById("startAmount"),
+    btnAddBalance: document.getElementById("btnAddBalance"),
+    priceUpdated: document.getElementById("priceUpdated"),
+    priceBody: document.getElementById("priceBody"),
+    manualTradeForm: document.getElementById("manualTradeForm"),
+    manualSymbol: document.getElementById("manualSymbol"),
+    manualSide: document.getElementById("manualSide"),
+    manualQty: document.getElementById("manualQty"),
+    estPrice: document.getElementById("estPrice"),
+    estCost: document.getElementById("estCost"),
+    tradeLogBody: document.getElementById("tradeLogBody"),
+    chips: Array.from(document.querySelectorAll(".range-chips .chip")),
+    btnReset: document.getElementById("btnReset"),
+    toastContainer: document.getElementById("toastContainer"),
+  };
+
+  /* ---------------------------------------------------------------------
+   * Utility functions
+   */
+  function fmtUSD(n) {
+    const sign = n < 0 ? "-" : "";
+    const v = Math.abs(Number(n) || 0);
+    return `${sign}$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
-  function renderPrices(){
-    el.pricesList.innerHTML = "";
-    SYMBOLS.forEach(sym=>{
-      const row = document.createElement("li");
-      const p = prices.get(sym);
-      row.innerHTML = `<div class="sym">${sym}</div><div class="val ${p?.stale?'stale':''}">${p?.price!=null?fmtUSD(p.price):'—'}</div>`;
-      el.pricesList.appendChild(row);
+  function fmtQty(q) {
+    const n = Number(q) || 0;
+    return n.toFixed(4).replace(/\.0+$/, "");
+  }
+
+  function toast(message, type = "success", ms = 3000) {
+    const el = document.createElement("div");
+    el.className = `toast ${type}`;
+    el.textContent = message;
+    refs.toastContainer.appendChild(el);
+    setTimeout(() => {
+      el.remove();
+    }, ms);
+  }
+
+  // Compute the total market value of all open positions using the latest
+  // prices. Symbols without a price are considered worthless.
+  function computePositionsValue() {
+    let total = 0;
+    for (const sym in localPositions) {
+      const qty = Number(localPositions[sym]) || 0;
+      const price = Number(localPrices[sym]) || 0;
+      total += price * qty;
+    }
+    return total;
+  }
+
+  // Update the equity/cash/positions values in the UI from the local state.
+  function renderSnapshot() {
+    const posVal = computePositionsValue();
+    const equity = localCash + posVal;
+    refs.snapCash.textContent = fmtUSD(localCash);
+    refs.snapPositions.textContent = fmtUSD(posVal);
+    refs.snapEquity.textContent = fmtUSD(equity);
+  }
+
+  // Render the trade log table from localTrades.
+  function renderTradeLog() {
+    refs.tradeLogBody.innerHTML = "";
+    localTrades.forEach((t) => {
+      const tr = document.createElement("tr");
+      const time = new Date(t.time).toLocaleTimeString();
+      tr.innerHTML = `
+        <td>${time}</td>
+        <td>${t.symbol}</td>
+        <td style="color:${t.side === 'BUY' ? '#35c17b' : '#dd4f4f'}">${t.side}</td>
+        <td>${fmtQty(t.qty)}</td>
+        <td>${fmtUSD(t.price)}</td>
+        <td>${fmtUSD(t.total)}</td>
+      `;
+      refs.tradeLogBody.insertBefore(tr, refs.tradeLogBody.firstChild);
     });
   }
 
-  async function fetchCoinbaseSpot(sym){
-    // Coinbase expects "ETH-USD" etc
-    const pair = sym.replace("/","-").replace("DOGE","DOGE").replace("DOT","DOT");
-    const url = `https://api.coinbase.com/v2/prices/${pair}/spot`;
-    const r = await fetch(url,{cache:"no-store"});
-    const j = await r.json();
-    const price = Number(j?.data?.amount);
-    if (Number.isFinite(price)) return price;
-    throw new Error("coinbase price missing");
-  }
-
-  async function fetchPrices(){
-    // Try CoinGecko batch first
-    const ids = Object.values(CG_IDS).join(",");
-    const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
-    let ok = false;
-    try{
-      const res = await fetch(cgUrl,{cache:"no-store"});
-      if(!res.ok) throw new Error("cg http");
-      const data = await res.json();
-      for(const sym of SYMBOLS){
-        const id = CG_IDS[sym];
-        const price = data?.[id]?.usd;
-        if(typeof price === "number"){
-          prices.set(sym,{price, ts:Date.now(), stale:false});
-          ok = true;
-        }else{
-          // mark for fallback
-          prices.set(sym,{...(prices.get(sym)||{}), stale:true});
-        }
+  // Create or update the Chart.js instance using the supplied data array.
+  function updateChart() {
+    // Filter the priceHistory based on the current range selection
+    let now = Date.now();
+    let filtered;
+    switch (currentRange) {
+      case "1D": {
+        const cutoff = now - 24 * 60 * 60 * 1000;
+        filtered = priceHistory.filter((p) => p.t.getTime() >= cutoff);
+        break;
       }
-    }catch(e){
-      // cg failed, fall through to fallback
-    }
-
-    // Fallback for any stale/empty using Coinbase
-    for(const sym of SYMBOLS){
-      const entry = prices.get(sym);
-      if(!entry || entry.stale || entry.price == null){
-        try{
-          const p = await fetchCoinbaseSpot(sym);
-          prices.set(sym,{price:p, ts:Date.now(), stale:false});
-          ok = true;
-        }catch(e){
-          const prev = prices.get(sym)||{};
-          prices.set(sym,{...prev, stale:true});
-        }
+      case "1W": {
+        const cutoff = now - 7 * 24 * 60 * 60 * 1000;
+        filtered = priceHistory.filter((p) => p.t.getTime() >= cutoff);
+        break;
       }
+      case "1M": {
+        const cutoff = now - 30 * 24 * 60 * 60 * 1000;
+        filtered = priceHistory.filter((p) => p.t.getTime() >= cutoff);
+        break;
+      }
+      case "1Y": {
+        const cutoff = now - 365 * 24 * 60 * 60 * 1000;
+        filtered = priceHistory.filter((p) => p.t.getTime() >= cutoff);
+        break;
+      }
+      case "ALL":
+        filtered = priceHistory.slice();
+        break;
+      case "live":
+      default:
+        filtered = priceHistory.slice();
+        break;
     }
-
-    el.priceStatus.textContent = ok ? "Live" : "Stale";
-    el.lastUpdated.textContent = ok ? `Updated: ${nowTime()}` : "";
-    renderPrices();
-    renderSnapshot();
-    recordEquityPoint();
-    renderChart();
-    updateEstimate();
-  }
-
-  const getPrice = (sym)=> prices.get(sym)?.price ?? null;
-  function updateEstimate(){
-    const sym = (el.tSymbol.value||"").toUpperCase().trim();
-    const qty = Number(el.tQty.value);
-    const p = getPrice(sym);
-    el.estPrice.textContent = p? fmtUSD(p): "—";
-    el.estCost.textContent = (p && qty>0)? fmtUSD(p*qty): "—";
-  }
-
-  function canBuy(sym, qty){
-    const p = getPrice(sym); if(!p) return {ok:false, reason:"Price unavailable"};
-    const cost = p*qty; if(cost > state.cash + 1e-9) return {ok:false, reason:`Not enough cash: need ${fmtUSD(cost)}, have ${fmtUSD(state.cash)}`};
-    return {ok:true};
-  }
-  function canSell(sym, qty){
-    const held = state.positions[sym]||0; if(qty > held + 1e-12) return {ok:false, reason:`Not enough holdings: have ${held}`};
-    return {ok:true};
-  }
-  function executeTrade(sym, side, qty){
-    const p = getPrice(sym); if(!p) throw new Error("Price unavailable");
-    if(side==="BUY"){ const v=canBuy(sym, qty); if(!v.ok) throw new Error(v.reason); state.cash -= p*qty; state.positions[sym]=(state.positions[sym]||0)+qty; }
-    else { const v=canSell(sym, qty); if(!v.ok) throw new Error(v.reason); state.cash += p*qty; state.positions[sym]=(state.positions[sym]||0)-qty; if(state.positions[sym]<1e-12) delete state.positions[sym]; }
-    state.trades.unshift({time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty});
-    save(); renderSnapshot(); renderTrades(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
-  }
-  function renderTrades(){
-    el.tradeTable.innerHTML = "";
-    state.trades.forEach(tr=>{
-      const r = document.createElement("tr");
-      r.innerHTML = `<td>${tr.time}</td><td>${tr.symbol}</td><td class="${tr.side==="BUY"?"good":"bad"}">${tr.side}</td><td>${tr.qty}</td><td>${fmtUSD(tr.price)}</td><td>${fmtUSD(tr.total)}</td>`;
-      el.tradeTable.appendChild(r);
-    });
-  }
-
-  // Chart + refresh control
-  let pollMs = 2000, pollTimer=null; const equityHistory=[]; let chart, currentRange="1D";
-  function recordEquityPoint(){ const eq = state.cash + computePositionsValue(); equityHistory.push({t:Date.now(), v:eq}); const cutoff=Date.now()-7*24*60*60*1000; while(equityHistory.length && equityHistory[0].t<cutoff) equityHistory.shift(); }
-  function startPoll(){ if(pollTimer) clearInterval(pollTimer); if(pollMs>0) pollTimer=setInterval(fetchPrices, pollMs); }
-  el.refreshRate.addEventListener("change", ()=>{ pollMs = Number(el.refreshRate.value); startPoll(); if(pollMs>0) fetchPrices(); });
-
-  function buildChart(){
+    // Transform into Chart.js friendly objects
+    const points = filtered.map((pt) => ({ x: pt.t, y: pt.v }));
+    // Create chart if it doesn't exist
     const ctx = document.getElementById("equityChart").getContext("2d");
-    chart = new Chart(ctx, { type:"line", data:{ labels:[], datasets:[{label:"Equity", data:[], borderWidth:2, pointRadius:0, tension:0.25}] },
-      options:{ animation:false, responsive:true, scales:{ x:{ticks:{color:"#9db2b2"}, grid:{color:"#24303a"}}, y:{ticks:{color:"#9db2b2"}, grid:{color:"#24303a"}} }, plugins:{legend:{display:false}} } });
+    if (!chart) {
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          datasets: [
+            {
+              label: "Equity",
+              data: points,
+              fill: false,
+              tension: 0.3,
+              borderColor: "#28bfa3",
+              borderWidth: 2,
+              pointRadius: 0,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: {
+              type: "time",
+              time: { unit: "minute", tooltipFormat: "MMM d, h:mm:ss a" },
+              grid: { display: false },
+              ticks: { color: "#4f646f" },
+            },
+            y: {
+              ticks: {
+                color: "#4f646f",
+                callback: function (value) {
+                  return `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+                },
+              },
+              grid: { color: "#1a2d42" },
+            },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function (ctx) {
+                  const v = ctx.parsed.y;
+                  return `Equity: ${fmtUSD(v)}`;
+                },
+              },
+            },
+          },
+        },
+      });
+    } else {
+      chart.data.datasets[0].data = points;
+      chart.update("none");
+    }
   }
-  function renderChart(){
-    if(!chart) return; const now=Date.now(); const win={ "1D":86400000,"1W":604800000,"1M":2592000000,"1Y":31536000000,"ALL":Infinity }[currentRange];
-    const slice = equityHistory.filter(p => currentRange==="ALL" || (now-p.t)<=win);
-    chart.data.labels = slice.map(p=> new Date(p.t).toLocaleTimeString());
-    chart.data.datasets[0].data = slice.map(p=> p.v);
-    chart.update();
+
+  // Add a new equity point to priceHistory and optionally update the chart
+  function pushEquityPoint() {
+    const posVal = computePositionsValue();
+    const equity = localCash + posVal;
+    priceHistory.push({ t: new Date(), v: equity });
+    // Keep history from growing unbounded; cap at ~5k points (~2h of 2s ticks)
+    if (priceHistory.length > 5000) priceHistory.shift();
+    if (currentRange === "live") {
+      updateChart();
+    }
   }
-  document.addEventListener("click", (e)=>{ const b=e.target.closest(".chip"); if(!b) return; document.querySelectorAll(".chip").forEach(c=>c.classList.remove("selected")); b.classList.add("selected"); currentRange=b.dataset.range; renderChart(); });
 
-  // Events
-  el.addApply.addEventListener("click", ()=>{
-    const amt = Number(el.customAdd.value);
-    if(amt>0){ state.cash += amt; save(); toast(`Added ${fmtUSD(amt)} starting balance`); el.customAdd.value=""; renderSnapshot(); recordEquityPoint(); renderChart(); }
-  });
+  // Fetch current USD prices for all configured symbols. This uses Coingecko's
+  // /simple/price endpoint for batch efficiency. When a price is missing
+  // from Coingecko we fall back to Coinbase for that individual symbol. The
+  // returned object contains symbol → price mappings.
+  async function fetchAllPrices() {
+    const ids = SYMBOLS.map((sym) => COINGECKO_MAP[sym.split("/")[0]]).filter(Boolean);
+    const query = ids.join(",");
+    let coingeckoData = {};
+    try {
+      const res = await fetch(
+        `https://api.coingecko.com/api/v3/simple/price?ids=${query}&vs_currencies=usd`,
+        { cache: "no-store" }
+      );
+      coingeckoData = await res.json();
+    } catch (e) {
+      console.warn("Coingecko fetch failed", e);
+    }
+    const prices = {};
+    for (const sym of SYMBOLS) {
+      const base = sym.split("/")[0];
+      const id = COINGECKO_MAP[base];
+      const price = coingeckoData?.[id]?.usd;
+      if (price != null && !isNaN(price)) {
+        prices[sym] = Number(price);
+      } else {
+        // fallback to Coinbase per symbol
+        const product = COINBASE_MAP[base];
+        try {
+          const r = await fetch(
+            `https://api.exchange.coinbase.com/products/${product}/ticker`,
+            { cache: "no-store" }
+          );
+          const json = await r.json();
+          const p = Number(json.price);
+          if (!isNaN(p)) prices[sym] = p;
+        } catch (err) {
+          console.warn(`Coinbase fetch failed for ${sym}`, err);
+        }
+      }
+    }
+    return prices;
+  }
 
-  el.tSymbol.addEventListener("input", updateEstimate);
-  el.tQty.addEventListener("input", updateEstimate);
-  el.tSide.addEventListener("change", updateEstimate);
+  // Update localPrices, price list UI, snapshot and equity history. Called
+  // periodically by the polling timer.
+  async function updatePrices() {
+    const newPrices = await fetchAllPrices();
+    const now = new Date();
+    if (Object.keys(newPrices).length > 0) {
+      localPrices = { ...localPrices, ...newPrices };
+      refs.priceUpdated.textContent = `Updated: ${now.toLocaleTimeString()}`;
+      renderPriceList();
+      renderSnapshot();
+      pushEquityPoint();
+    } else {
+      // When all price sources fail we mark the timestamp as stale but
+      // otherwise leave values unchanged.
+      refs.priceUpdated.textContent = `Updated: ${now.toLocaleTimeString()} (stale)`;
+    }
+  }
 
-  el.tradeForm.addEventListener("submit", (e)=>{
+  // Render the live price list. Uses localPrices to build table rows.
+  function renderPriceList() {
+    refs.priceBody.innerHTML = "";
+    SYMBOLS.forEach((sym) => {
+      const tr = document.createElement("tr");
+      const price = localPrices[sym];
+      const priceText = price != null ? `$${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+      tr.innerHTML = `<td class="symbol">${sym}</td><td>${priceText}</td>`;
+      refs.priceBody.appendChild(tr);
+    });
+  }
+
+  // Handle starting balance addition
+  function handleAddBalance() {
+    const amt = parseFloat(refs.startAmount.value);
+    if (isNaN(amt) || amt <= 0) {
+      toast("Enter a valid amount", "error");
+      return;
+    }
+    localCash += amt;
+    refs.startAmount.value = "";
+    renderSnapshot();
+    pushEquityPoint();
+    toast(`Added ${fmtUSD(amt)} to cash`, "success");
+  }
+
+  // Estimate price and cost as user types
+  let estimateTimer = null;
+  function scheduleEstimate() {
+    clearTimeout(estimateTimer);
+    estimateTimer = setTimeout(async () => {
+      const sym = refs.manualSymbol.value.trim().toUpperCase();
+      const qty = parseFloat(refs.manualQty.value);
+      if (!sym || isNaN(qty) || qty <= 0) {
+        refs.estPrice.textContent = "Est. Price: —";
+        refs.estCost.textContent = "Est. Cost: —";
+        return;
+      }
+      const price = localPrices[sym] || (await fetchSinglePrice(sym));
+      if (price != null) {
+        refs.estPrice.textContent = `Est. Price: ${fmtUSD(price)}`;
+        const cost = price * qty;
+        refs.estCost.textContent = `Est. Cost: ${fmtUSD(cost)}`;
+      } else {
+        refs.estPrice.textContent = "Est. Price: —";
+        refs.estCost.textContent = "Est. Cost: —";
+      }
+    }, 400);
+  }
+
+  // Fetch price for a single symbol using fallback logic (backend → Coingecko → Coinbase)
+  async function fetchSinglePrice(sym) {
+    const upper = sym.toUpperCase();
+    // If cached price exists, return it
+    if (localPrices[upper] != null) return localPrices[upper];
+    // Try Coingecko
+    const base = upper.split("/")[0];
+    const id = COINGECKO_MAP[base];
+    if (id) {
+      try {
+        const r = await fetch(
+          `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=usd`,
+          { cache: "no-store" }
+        );
+        const j = await r.json();
+        const p = j[id]?.usd;
+        if (p != null && !isNaN(p)) return Number(p);
+      } catch (e) {}
+    }
+    // Fallback to Coinbase
+    const product = COINBASE_MAP[base];
+    if (product) {
+      try {
+        const r = await fetch(
+          `https://api.exchange.coinbase.com/products/${product}/ticker`,
+          { cache: "no-store" }
+        );
+        const j = await r.json();
+        const p = Number(j.price);
+        if (!isNaN(p)) return p;
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  // Handle manual trade submission
+  async function handleManualTrade(e) {
     e.preventDefault();
-    el.tradeError.hidden = true;
-    const sym = (el.tSymbol.value||"").toUpperCase().trim();
-    const side = el.tSide.value;
-    const qty = Number(el.tQty.value);
-    if(!["BTC/USD","ETH/USD","SOL/USD","DOT/USD","DOGE/USD"].includes(sym)){ el.tradeError.hidden=false; el.tradeError.textContent="Enter a valid symbol from the list."; return; }
-    if(!(qty>0)){ el.tradeError.hidden=false; el.tradeError.textContent="Enter a positive quantity."; return; }
-    try { executeTrade(sym, side, qty); el.tQty.value=""; updateEstimate(); recordEquityPoint(); renderChart(); }
-    catch(err){ el.tradeError.hidden=false; el.tradeError.textContent = err.message || "Trade failed"; }
-  });
-
-  el.reset.addEventListener("click", ()=>{
-    state = { cash:0, positions:{}, trades:[] };
-    save(); renderTrades(); renderSnapshot(); equityHistory.length=0; recordEquityPoint(); renderChart(); toast("Simulation reset");
-  });
-
-  function boot(){
-    SYMBOLS.forEach(sym=> prices.set(sym,{price:null, ts:null, stale:false}));
-    renderPrices(); renderTrades(); renderSnapshot(); updateEstimate(); buildChart(); recordEquityPoint(); renderChart();
-    fetchPrices(); pollMs = Number(el.refreshRate.value||2000); if(pollMs>0) startPoll();
+    const sym = refs.manualSymbol.value.trim().toUpperCase();
+    const side = refs.manualSide.value.toUpperCase();
+    const qty = parseFloat(refs.manualQty.value);
+    if (!sym || !SYMBOLS.includes(sym)) {
+      toast("Invalid symbol", "error");
+      return;
+    }
+    if (isNaN(qty) || qty <= 0) {
+      toast("Invalid quantity", "error");
+      return;
+    }
+    // Ensure we have a price
+    let price = localPrices[sym];
+    if (price == null) {
+      price = await fetchSinglePrice(sym);
+      if (price == null) {
+        toast("Price unavailable", "error");
+        return;
+      }
+      localPrices[sym] = price;
+      renderPriceList();
+    }
+    const totalCost = price * qty;
+    if (side === "BUY") {
+      if (totalCost > localCash) {
+        toast("Not enough cash for this purchase", "error");
+        return;
+      }
+      localCash -= totalCost;
+      localPositions[sym] = (Number(localPositions[sym]) || 0) + qty;
+    } else if (side === "SELL") {
+      const held = Number(localPositions[sym]) || 0;
+      if (qty > held) {
+        toast("Not enough holdings to sell", "error");
+        return;
+      }
+      localCash += totalCost;
+      localPositions[sym] = held - qty;
+      if (localPositions[sym] <= 0) delete localPositions[sym];
+    }
+    // Record trade
+    const trade = {
+      time: new Date(),
+      symbol: sym,
+      side,
+      qty,
+      price,
+      total: totalCost,
+    };
+    localTrades.push(trade);
+    // Update UI
+    renderTradeLog();
+    renderSnapshot();
+    pushEquityPoint();
+    refs.manualQty.value = "";
+    toast(`${side} ${fmtQty(qty)} ${sym} executed`, "success");
   }
-  document.addEventListener("DOMContentLoaded", boot);
+
+  // Handle range chip selection
+  function handleRangeClick(e) {
+    const btn = e.target.closest(".chip");
+    if (!btn) return;
+    const range = btn.getAttribute("data-range");
+    currentRange = range;
+    // Update active state
+    refs.chips.forEach((chip) => chip.classList.toggle("active", chip === btn));
+    // When switching away from live, we intentionally do not update the chart
+    // every poll. Instead we render once on switch using the filtered history.
+    updateChart();
+  }
+
+  // Reset the simulation: clear cash, positions, trades, history and snapshot
+  function handleReset() {
+    localCash = 0;
+    localPositions = {};
+    localTrades = [];
+    priceHistory = [];
+    renderTradeLog();
+    renderSnapshot();
+    updateChart();
+    toast("Simulation reset", "success");
+  }
+
+  // Kick off periodic polling
+  async function startPolling() {
+    await updatePrices();
+    if (priceTimer) clearInterval(priceTimer);
+    priceTimer = setInterval(updatePrices, POLL_INTERVAL);
+  }
+
+  // Init function sets up event listeners, initial UI state and polling
+  function init() {
+    // Populate symbol datalist (in case future expansions)
+    const datalist = document.getElementById("symbolList");
+    datalist.innerHTML = "";
+    SYMBOLS.forEach((sym) => {
+      const opt = document.createElement("option");
+      opt.value = sym;
+      datalist.appendChild(opt);
+    });
+    // Event listeners
+    refs.btnAddBalance.addEventListener("click", handleAddBalance);
+    refs.manualSymbol.addEventListener("input", scheduleEstimate);
+    refs.manualQty.addEventListener("input", scheduleEstimate);
+    refs.manualTradeForm.addEventListener("submit", handleManualTrade);
+    refs.chips.forEach((chip) => chip.addEventListener("click", handleRangeClick));
+    refs.btnReset.addEventListener("click", handleReset);
+    // Initial renders
+    renderPriceList();
+    renderSnapshot();
+    renderTradeLog();
+    updateChart();
+    // Start price polling
+    startPolling();
+  }
+  // Start when DOM ready
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 })();

@@ -2,134 +2,143 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mr. Teals — Paper Trading</title>
-  <!-- Embedded favicons -->
-  <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAANElEQVR4nO3OMQEAMAjEwKcGunTAv9Eig+ViIFf39c9iZ3MOAAAAAAAAAAAAAAAAAACQJAPYIAF6DlDBWgAAAABJRU5ErkJggg==">
-  <link rel="icon" type="image/png" sizes="256x256" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAADIUlEQVR4nO3UMQHAIADAsDEDPBz4NwoyOJoo6NUx1z4fkPS/DgDeMQAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIu7x3AzovSy3LAAAAAElFTkSuQmCC">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mr. Teals - Paper Trading Dashboard</title>
+  <!-- Use the provided Mr. Teals logo as the site icon.  If you rename the PNG it will
+       still work as long as the href matches your file name. -->
+  <link rel="icon" type="image/png" href="4b75d94a-1586-433d-b7c8-c49e8c120a06.png" />
   <link rel="stylesheet" href="style.css" />
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <img id="brandIcon" src="favicon.png" alt="Mr. Teals" />
-      <span class="wordmark">Mr. Teals</span>
+      <!-- Brand icon (sized down); you can replace the src with your own favicon file -->
+      <img id="brandIcon" src="4b75d94a-1586-433d-b7c8-c49e8c120a06.png" alt="Mr. Teals" />
+      <span class="brand-text">Mr. Teals</span>
     </div>
-    <div class="top-actions">
-      <button id="settingsBtn" class="btn ghost" title="Open settings (automation later)">Settings</button>
-      <button id="resetBtn" class="btn danger">Reset</button>
+    <div class="actions">
+      <!-- Placeholder settings button; automation settings will appear here in future phases -->
+      <button id="btnSettings" class="btn btn-secondary">Settings</button>
+      <button id="btnReset" class="btn btn-danger">Reset</button>
     </div>
   </header>
 
-  <!-- Equity / Cash strip -->
-  <section class="strip">
-    <div class="metric">
-      <div class="metric-label">Equity</div>
-      <div id="equityVal" class="metric-value">$0.00</div>
+  <!-- Equity, cash, positions and starting balance row -->
+  <section class="stats-row">
+    <div class="stat-card">
+      <div class="stat-title">Equity</div>
+      <div id="snapEquity" class="stat-value">$0.00</div>
     </div>
-    <div class="metric">
-      <div class="metric-label">Cash</div>
-      <div id="cashVal" class="metric-value">$0.00</div>
+    <div class="stat-card">
+      <div class="stat-title">Cash</div>
+      <div id="snapCash" class="stat-value">$0.00</div>
     </div>
-    <div class="metric">
-      <div class="metric-label">Positions</div>
-      <div id="positionsVal" class="metric-value">$0.00</div>
+    <div class="stat-card">
+      <div class="stat-title">Positions</div>
+      <div id="snapPositions" class="stat-value">$0.00</div>
     </div>
-    <div class="add-cash">
-      <label>Starting Balance</label><small class="muted">Enter amount, then click Add</small>
-      <div class="add-controls">
-        <input id="customAdd" type="number" min="0" step="1" placeholder="Custom $" />
-        <button id="addApplyBtn" class="btn add">Add</button>
+    <div class="start-balance-card">
+      <label for="startAmount" class="start-label">Add Starting Balance</label>
+      <div class="start-controls">
+        <input type="number" id="startAmount" min="0" placeholder="$" />
+        <button id="btnAddBalance" class="btn btn-primary">Add</button>
       </div>
     </div>
   </section>
 
-  <main class="grid">
-    <!-- Prices panel -->
-    <section class="card">
-      <div class="section-title">
-        Live Prices <small id="priceStatus" class="muted">Connecting…</small>
-        <div class="live-controls">
-          <label class="muted">Refresh:</label>
-          <select id="refreshRate">
-            <option value="2000" selected>Normal</option>
-            <option value="1000">Fast</option>
-            <option value="0">Pause</option>
-          </select>
-          <small id="lastUpdated" class="muted"></small>
-        </div>
+  <!-- Main grid containing live prices and manual trade form -->
+  <section class="main-grid">
+    <!-- Live prices list -->
+    <div class="card price-card">
+      <div class="card-header">
+        <h2>Live Prices</h2>
+        <span id="priceUpdated" class="updated-time">Updated: --:--:--</span>
       </div>
-      <ul id="pricesList" class="prices"></ul>
-    </section>
-
-    <!-- Manual trade -->
-    <section class="card">
-      <div class="section-title">Manual Trade</div>
-      <form id="tradeForm" class="trade-form" autocomplete="off">
-        <label>
-          Symbol
-          <input id="tradeSymbol" list="symbolsList" placeholder="BTC/USD" />
-          <datalist id="symbolsList">
+      <div class="card-body price-body">
+        <table class="price-table">
+          <tbody id="priceBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <!-- Manual trade form -->
+    <div class="card trade-card">
+      <h2>Manual Trade</h2>
+      <form id="manualTradeForm" autocomplete="off">
+        <div class="form-row">
+          <label for="manualSymbol">Symbol</label>
+          <input id="manualSymbol" list="symbolList" placeholder="BTC/USD" />
+          <datalist id="symbolList">
             <option value="BTC/USD"></option>
             <option value="ETH/USD"></option>
             <option value="SOL/USD"></option>
             <option value="DOT/USD"></option>
             <option value="DOGE/USD"></option>
           </datalist>
-        </label>
-        <label>
-          Side
-          <select id="tradeSide">
+        </div>
+        <div class="form-row">
+          <label for="manualSide">Side</label>
+          <select id="manualSide">
             <option value="BUY">BUY</option>
             <option value="SELL">SELL</option>
           </select>
-        </label>
-        <label>
-          Quantity
-          <input id="tradeQty" type="number" step="any" min="0.0001" placeholder="0.01" />
-        </label>
-        <div class="est">
-          <div>Est. Price: <span id="estPrice">—</span></div>
-          <div>Est. Cost: <span id="estCost">—</span></div>
         </div>
-        <button class="btn primary" type="submit">Execute</button>
+        <div class="form-row">
+          <label for="manualQty">Quantity</label>
+          <input id="manualQty" type="number" min="0" step="any" placeholder="0.0001" />
+        </div>
+        <div class="form-row form-estimates">
+          <span id="estPrice" class="estimate">Est. Price: —</span>
+          <span id="estCost" class="estimate">Est. Cost: —</span>
+        </div>
+        <div class="form-row">
+          <button type="submit" id="btnExecute" class="btn btn-primary">Execute</button>
+        </div>
       </form>
-      <div id="tradeError" class="error" hidden></div>
-    </section>
+    </div>
+  </section>
 
-    <!-- Equity Chart -->
-    <section class="card span2">
-      <div class="section-title">Equity Chart
-        <div class="range-chips">
-          <button class="chip selected" data-range="1D">1D</button>
-          <button class="chip" data-range="1W">1W</button>
-          <button class="chip" data-range="1M">1M</button>
-          <button class="chip" data-range="1Y">1Y</button>
-          <button class="chip" data-range="ALL">ALL</button>
-        </div>
+  <!-- Trade log table -->
+  <section class="card log-card">
+    <h2>Trade Log</h2>
+    <table class="trade-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Symbol</th>
+          <th>Side</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="tradeLogBody"></tbody>
+    </table>
+  </section>
+
+  <!-- Equity chart card -->
+  <section class="card chart-card">
+    <div class="card-header">
+      <h2>Equity</h2>
+      <div class="range-chips">
+        <button class="chip active" data-range="live">Live</button>
+        <button class="chip" data-range="1D">1D</button>
+        <button class="chip" data-range="1W">1W</button>
+        <button class="chip" data-range="1M">1M</button>
+        <button class="chip" data-range="1Y">1Y</button>
+        <button class="chip" data-range="ALL">ALL</button>
       </div>
-      <canvas id="equityChart" height="120"></canvas>
-    </section>
+    </div>
+    <div class="card-body chart-body">
+      <canvas id="equityChart" height="200"></canvas>
+    </div>
+  </section>
 
-    <!-- Trade Log -->
-    <section class="card span2">
-      <div class="section-title">Trade Log</div>
-      <div class="table-wrap">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Total</th>
-            </tr>
-          </thead>
-          <tbody id="tradeTable"></tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+  <!-- Toast container -->
+  <div id="toastContainer"></div>
 
-  <div id="toastHost" class="toasts"></div>
-
+  <!-- Main JavaScript for the dashboard -->
   <script src="app.js"></script>
 </body>
 </html>
