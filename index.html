@@ -4,12 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Mr. Teals — Paper Trading</title>
+  <!-- Embedded favicons -->
+  <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAANElEQVR4nO3OMQEAMAjEwKcGunTAv9Eig+ViIFf39c9iZ3MOAAAAAAAAAAAAAAAAAACQJAPYIAF6DlDBWgAAAABJRU5ErkJggg==">
+  <link rel="icon" type="image/png" sizes="256x256" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAADIUlEQVR4nO3UMQHAIADAsDEDPBz4NwoyOJoo6NUx1z4fkPS/DgDeMQAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIMwAIu7x3AzovSy3LAAAAAElFTkSuQmCC">
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
+      <img id="brandIcon" src="favicon.png" alt="Mr. Teals" />
       <span class="wordmark">Mr. Teals</span>
     </div>
     <div class="top-actions">
@@ -18,10 +22,25 @@
     </div>
   </header>
 
+  <!-- Equity / Cash strip -->
   <section class="strip">
-    <div class="metric"><div class="metric-label">Equity</div><div id="equityVal" class="metric-value">$0.00</div></div>
-    <div class="metric"><div class="metric-label">Cash</div><div id="cashVal" class="metric-value">$0.00</div></div>
-    <div class="metric"><div class="metric-label">Positions</div><div id="positionsVal" class="metric-value">$0.00</div></div>
+    <div class="metric">
+      <div class="metric-label">Equity</div>
+      <div id="equityVal" class="metric-value">$0.00</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Cash</div>
+      <div id="cashVal" class="metric-value">$0.00</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Positions</div>
+      <div id="positionsVal" class="metric-value">$0.00</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">P/L Today</div>
+      <div id="pnlTodayVal" class="metric-value">$0.00</div>
+      <div class="muted small">Unrealized now: <span id="unrealizedVal">$0.00</span></div>
+    </div>
     <div class="add-cash">
       <label>Starting Balance</label><small class="muted">Enter amount, then click Add</small>
       <div class="add-controls">
@@ -32,6 +51,7 @@
   </section>
 
   <main class="grid">
+    <!-- Prices panel -->
     <section class="card">
       <div class="section-title">
         Live Prices <small id="priceStatus" class="muted">Connecting…</small>
@@ -48,36 +68,42 @@
       <ul id="pricesList" class="prices"></ul>
     </section>
 
+    <!-- Manual trade -->
     <section class="card">
       <div class="section-title">Manual Trade</div>
       <form id="tradeForm" class="trade-form" autocomplete="off">
-        <label>Symbol
+        <label>
+          Symbol
           <input id="tradeSymbol" list="symbolsList" placeholder="BTC/USD" />
           <datalist id="symbolsList">
-            <option value="BTC/USD"></option><option value="ETH/USD"></option>
-            <option value="SOL/USD"></option><option value="DOT/USD"></option>
+            <option value="BTC/USD"></option>
+            <option value="ETH/USD"></option>
+            <option value="SOL/USD"></option>
+            <option value="DOT/USD"></option>
             <option value="DOGE/USD"></option>
           </datalist>
         </label>
-        <label>Side
-          <select id="tradeSide"><option value="BUY">BUY</option><option value="SELL">SELL</option></select>
+        <label>
+          Side
+          <select id="tradeSide">
+            <option value="BUY">BUY</option>
+            <option value="SELL">SELL</option>
+          </select>
         </label>
-        <label>Quantity
-          <div class="qty-row">
-            <input id="tradeQty" type="number" step="any" min="0.0001" placeholder="0.01" />
-            <button id="maxQtyBtn" type="button" class="btn ghost small" title="Use max based on cash (BUY) or holdings (SELL)">Max</button>
-          </div>
+        <label>
+          Quantity
+          <input id="tradeQty" type="number" step="any" min="0.0001" placeholder="0.01" />
         </label>
         <div class="est">
           <div>Est. Price: <span id="estPrice">—</span></div>
           <div>Est. Cost: <span id="estCost">—</span></div>
         </div>
-        <div id="pnlPreview" class="pnl muted" hidden></div>
         <button class="btn primary" type="submit">Execute</button>
       </form>
       <div id="tradeError" class="error" hidden></div>
     </section>
 
+    <!-- Equity Chart -->
     <section class="card span2">
       <div class="section-title">Equity Chart
         <div class="range-chips">
@@ -88,14 +114,19 @@
           <button class="chip" data-range="ALL">ALL</button>
         </div>
       </div>
-      <canvas id="equityChart" height="120"></canvas>
+      <canvas id="equityChart" height="80"></canvas>
     </section>
 
+    <!-- Trade Log -->
     <section class="card span2">
       <div class="section-title">Trade Log</div>
       <div class="table-wrap">
         <table class="table">
-          <thead><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+          <thead>
+            <tr>
+              <th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Total</th>
+            </tr>
+          </thead>
           <tbody id="tradeTable"></tbody>
         </table>
       </div>
@@ -103,6 +134,7 @@
   </main>
 
   <div id="toastHost" class="toasts"></div>
+
   <script src="app.js"></script>
 </body>
 </html>

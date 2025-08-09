@@ -1,33 +1,54 @@
-/* Mr. Teals Phase 1.3 — Max button + P&L preview (same layout) */
+/* Mr. Teals Phase 1.2 — Manual Trading (Fake Money, Live Prices with Fallback, Equity Chart) */
 (() => {
   const SYMBOLS = ["BTC/USD","ETH/USD","SOL/USD","DOT/USD","DOGE/USD"];
   const CG_IDS = { "BTC/USD":"bitcoin","ETH/USD":"ethereum","SOL/USD":"solana","DOT/USD":"polkadot","DOGE/USD":"dogecoin" };
 
   const $ = (s)=>document.querySelector(s);
+  const $$ = (s)=>Array.from(document.querySelectorAll(s));
   const el = {
+    pnlToday: document.querySelector("#pnlTodayVal"), unrealized: document.querySelector("#unrealizedVal"),
     equity: $("#equityVal"), cash: $("#cashVal"), positions: $("#positionsVal"),
     pricesList: $("#pricesList"), priceStatus: $("#priceStatus"), lastUpdated: $("#lastUpdated"),
     refreshRate: $("#refreshRate"),
     customAdd: $("#customAdd"), addApply: $("#addApplyBtn"),
     tradeForm: $("#tradeForm"), tSymbol: $("#tradeSymbol"), tSide: $("#tradeSide"), tQty: $("#tradeQty"),
     estPrice: $("#estPrice"), estCost: $("#estCost"), tradeError: $("#tradeError"),
-    pnlPreview: $("#pnlPreview"), maxQtyBtn: $("#maxQtyBtn"),
     tradeTable: $("#tradeTable"), reset: $("#resetBtn"), toastHost: $("#toastHost"),
   };
 
-  const LS_KEY = "mrteals.state.v1.3";
-  let state = { cash:0, positions:{}, trades:[], positionsMeta:{} };
+  const LS_KEY = "mrteals.state.v1.2";
+  let state = { cash:0, positions:{}, trades:[], positionsMeta:{}, realized:{} };
   try { const raw = localStorage.getItem(LS_KEY); if (raw) state = JSON.parse(raw);} catch {}
-
   const prices = new Map(); // symbol -> {price, ts, stale}
+  const todayKey = ()=>{ const d=new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${dd}`; };
+  function unrealizedPnL(){ 
+    let sum=0; 
+    for(const [sym,qty] of Object.entries(state.positions)){
+      const p = prices.get(sym)?.price;
+      const ac = state.positionsMeta?.[sym]?.avg ?? null;
+      if(p!=null && ac!=null) sum += (p-ac)*qty;
+    }
+    return sum;
+  }
+  function renderPnL(){ 
+    if(!el.pnlToday || !el.unrealized) return;
+    const r = state.realized?.[todayKey()] || 0;
+    const u = unrealizedPnL();
+    const t = r + u;
+    el.unrealized.textContent = fmtUSD(u);
+    el.pnlToday.textContent = fmtUSD(t);
+    el.pnlToday.classList.remove('positive','negative');
+    el.pnlToday.classList.add(t>=0?'positive':'negative');
+  }
 
-  const fmtUSD = (n) => { const v=Math.abs(Number(n)||0); const sign=Number(n)<0? "-" : ""; return `${sign}$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`; };
+
+  const fmtUSD = (n) => {
+    const v = Math.abs(Number(n) || 0); const sign = Number(n) < 0 ? "-" : "";
+    return `${sign}$${v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}`;
+  };
   const nowTime = ()=> new Date().toLocaleTimeString();
   const toast = (m)=>{ const t=document.createElement("div"); t.className="toast"; t.textContent=m; el.toastHost.appendChild(t); setTimeout(()=>t.remove(),2500); };
   const save = ()=> localStorage.setItem(LS_KEY, JSON.stringify(state));
-
-  const holding = (sym)=> state.positions[sym] || 0;
-  const avgCost = (sym)=> state.positionsMeta?.[sym]?.avg ?? null;
 
   const computePositionsValue = ()=> Object.entries(state.positions).reduce((sum,[sym,qty])=>{
     const p = prices.get(sym)?.price; return sum + (p? p*qty:0);
@@ -51,7 +72,8 @@
   }
 
   async function fetchCoinbaseSpot(sym){
-    const pair = sym.replace("/","-");
+    // Coinbase expects "ETH-USD" etc
+    const pair = sym.replace("/","-").replace("DOGE","DOGE").replace("DOT","DOT");
     const url = `https://api.coinbase.com/v2/prices/${pair}/spot`;
     const r = await fetch(url,{cache:"no-store"});
     const j = await r.json();
@@ -61,6 +83,7 @@
   }
 
   async function fetchPrices(){
+    // Try CoinGecko batch first
     const ids = Object.values(CG_IDS).join(",");
     const cgUrl = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
     let ok = false;
@@ -75,44 +98,45 @@
           prices.set(sym,{price, ts:Date.now(), stale:false});
           ok = true;
         }else{
+          // mark for fallback
           prices.set(sym,{...(prices.get(sym)||{}), stale:true});
         }
       }
-    }catch{}
+    }catch(e){
+      // cg failed, fall through to fallback
+    }
+
+    // Fallback for any stale/empty using Coinbase
     for(const sym of SYMBOLS){
       const entry = prices.get(sym);
       if(!entry || entry.stale || entry.price == null){
-        try{ prices.set(sym,{price: await fetchCoinbaseSpot(sym), ts:Date.now(), stale:false}); ok = true; }
-        catch{ prices.set(sym,{...(prices.get(sym)||{}), stale:true}); }
+        try{
+          const p = await fetchCoinbaseSpot(sym);
+          prices.set(sym,{price:p, ts:Date.now(), stale:false});
+          ok = true;
+        }catch(e){
+          const prev = prices.get(sym)||{};
+          prices.set(sym,{...prev, stale:true});
+        }
       }
     }
+
     el.priceStatus.textContent = ok ? "Live" : "Stale";
     el.lastUpdated.textContent = ok ? `Updated: ${nowTime()}` : "";
-    renderPrices(); renderSnapshot(); recordEquityPoint(); renderChart(); updateEstimate();
+    renderPrices(); renderPnL();
+    renderSnapshot(); renderPnL();
+    recordEquityPoint();
+    renderChart();
+    updateEstimate();
   }
 
   const getPrice = (sym)=> prices.get(sym)?.price ?? null;
-
   function updateEstimate(){
     const sym = (el.tSymbol.value||"").toUpperCase().trim();
     const qty = Number(el.tQty.value);
     const p = getPrice(sym);
     el.estPrice.textContent = p? fmtUSD(p): "—";
     el.estCost.textContent = (p && qty>0)? fmtUSD(p*qty): "—";
-
-    // P&L preview for SELL
-    el.pnlPreview.hidden = true;
-    if (p && qty>0 && el.tSide.value === "SELL"){
-      const ac = avgCost(sym);
-      const proceeds = p * qty;
-      if (ac != null){
-        const pnl = (p - ac) * qty;
-        const pct = ac ? ((p-ac)/ac)*100 : 0;
-        const cls = pnl >= 0 ? 'pos' : 'neg';
-        el.pnlPreview.innerHTML = `If sell ${qty} ${sym}: Proceeds <b>${fmtUSD(proceeds)}</b> · P/L <b class="${cls}">${fmtUSD(pnl)}</b> (${pct.toFixed(2)}%)`;
-        el.pnlPreview.hidden = false;
-      }
-    }
   }
 
   function canBuy(sym, qty){
@@ -121,38 +145,16 @@
     return {ok:true};
   }
   function canSell(sym, qty){
-    const held = holding(sym); if(qty > held + 1e-12) return {ok:false, reason:`Not enough holdings: have ${held}`};
+    const held = state.positions[sym]||0; if(qty > held + 1e-12) return {ok:false, reason:`Not enough holdings: have ${held}`};
     return {ok:true};
   }
-
   function executeTrade(sym, side, qty){
     const p = getPrice(sym); if(!p) throw new Error("Price unavailable");
-    if(side==="BUY"){
-      const v=canBuy(sym, qty); if(!v.ok) throw new Error(v.reason);
-      state.cash -= p*qty;
-      const prevQty = holding(sym);
-      const prevAvg = avgCost(sym) ?? p;
-      const newQty = prevQty + qty;
-      const newAvg = newQty > 0 ? ((prevAvg*prevQty) + (p*qty)) / newQty : p;
-      state.positions[sym] = newQty;
-      state.positionsMeta[sym] = { avg: newAvg };
-    } else {
-      const v=canSell(sym, qty); if(!v.ok) throw new Error(v.reason);
-      state.cash += p*qty;
-      const prevQty = holding(sym);
-      const ac = avgCost(sym) ?? p;
-      const newQty = prevQty - qty;
-      const pnl = (p - ac) * qty;
-      state.positions[sym] = newQty;
-      if (newQty <= 1e-12){ delete state.positions[sym]; delete state.positionsMeta[sym]; }
-      state.trades.unshift({time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty, pnl});
-      save(); renderSnapshot(); renderTrades(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
-      updateEstimate(); recordEquityPoint(); renderChart(); return;
-    }
+    if(side==="BUY"){ const v=canBuy(sym, qty); if(!v.ok) throw new Error(v.reason); state.cash -= p*qty; state.positions[sym]=(state.positions[sym]||0)+qty; }
+    else { const v=canSell(sym, qty); if(!v.ok) throw new Error(v.reason); state.cash += p*qty; state.positions[sym]=(state.positions[sym]||0)-qty; if(state.positions[sym]<1e-12) delete state.positions[sym]; }
     state.trades.unshift({time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty});
-    save(); renderSnapshot(); renderTrades(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
+    save(); renderSnapshot(); renderPnL(); renderTrades(); renderPnL(); toast(`${side} ${qty} ${sym} @ ${fmtUSD(p)}`);
   }
-
   function renderTrades(){
     el.tradeTable.innerHTML = "";
     state.trades.forEach(tr=>{
@@ -185,38 +187,14 @@
   // Events
   el.addApply.addEventListener("click", ()=>{
     const amt = Number(el.customAdd.value);
-    if(amt>0){ state.cash += amt; save(); toast(`Added ${fmtUSD(amt)} starting balance`); el.customAdd.value=""; renderSnapshot(); recordEquityPoint(); renderChart(); }
+    if(amt>0){ state.cash += amt; save(); toast(`Added ${fmtUSD(amt)} starting balance`); el.customAdd.value=""; renderSnapshot(); renderPnL(); recordEquityPoint(); renderChart(); }
   });
 
   el.tSymbol.addEventListener("input", updateEstimate);
   el.tQty.addEventListener("input", updateEstimate);
   el.tSide.addEventListener("change", updateEstimate);
 
-  // Max button
-  
-  // Max button (resilient): default symbol + fetch price if missing
-  el.maxQtyBtn.addEventListener("click", async () => {
-    let sym = (el.tSymbol.value||"").toUpperCase().trim();
-    if(!sym){
-      sym = "BTC/USD";
-      el.tSymbol.value = sym;
-    }
-    let p = getPrice(sym);
-    if (!p) {
-      toast("Fetching price for " + sym + "…");
-      try { await fetchPrices(); p = getPrice(sym); } catch {}
-    }
-    if (!p) { toast("Price unavailable for " + sym); return; }
-    if (el.tSide.value === "BUY"){
-      const maxQty = Math.max(0, Math.floor((state.cash / p) * 1e6) / 1e6);
-      el.tQty.value = maxQty > 0 ? String(maxQty) : "";
-    } else {
-      const hold = holding(sym);
-      el.tQty.value = hold > 0 ? String(hold) : "";
-    }
-    updateEstimate();
-  });
-el.tradeForm.addEventListener("submit", (e)=>{
+  el.tradeForm.addEventListener("submit", (e)=>{
     e.preventDefault();
     el.tradeError.hidden = true;
     const sym = (el.tSymbol.value||"").toUpperCase().trim();
@@ -229,14 +207,14 @@ el.tradeForm.addEventListener("submit", (e)=>{
   });
 
   el.reset.addEventListener("click", ()=>{
-    state = { cash:0, positions:{}, trades:[], positionsMeta:{} };
-    save(); renderTrades(); renderSnapshot(); equityHistory.length=0; recordEquityPoint(); renderChart(); toast("Simulation reset");
+    state = { cash:0, positions:{}, trades:[] };
+    save(); renderTrades(); renderPnL(); renderSnapshot(); renderPnL(); equityHistory.length=0; recordEquityPoint(); renderChart(); toast("Simulation reset");
   });
 
   function boot(){
     SYMBOLS.forEach(sym=> prices.set(sym,{price:null, ts:null, stale:false}));
-    renderPrices(); renderTrades(); renderSnapshot(); updateEstimate(); buildChart(); recordEquityPoint(); renderChart();
-    fetchPrices(); let pollMs = Number(el.refreshRate.value||2000); if(pollMs>0) setInterval(fetchPrices, pollMs);
+    renderPrices(); renderPnL(); renderTrades(); renderPnL(); renderSnapshot(); renderPnL(); updateEstimate(); buildChart(); recordEquityPoint(); renderChart();
+    fetchPrices(); pollMs = Number(el.refreshRate.value||2000); if(pollMs>0) startPoll();
   }
   document.addEventListener("DOMContentLoaded", boot);
 })();
