@@ -47,7 +47,7 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); f
 .muted { color: var(--muted); font-size: 12px; }
 
 .prices { list-style:none; margin:0; padding:0; }
-.prices li { display:grid; grid-template-columns: 140px 1fr 100px; gap:10px; align-items:center; padding:8px 6px; border-bottom:1px dashed var(--border); }
+.prices li { display:grid; grid-template-columns: 140px 1fr; gap:10px; align-items:center; padding:8px 6px; border-bottom:1px dashed var(--border); }
 .prices .sym { font-weight: 600; }
 .prices .val.stale::after { content: ' •'; color: var(--muted); }
 
@@ -70,9 +70,15 @@ html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); f
 .btn.ghost { background: transparent; }
 .btn.danger { background: var(--danger); border-color: var(--danger); color: white; }
 .btn.add { background:#0d2a2b; border-color:#113b3c; color:#9fe5db; }
+.btn.add.selected { background:#103335; border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; color:#9fe5db; }
 
 .toasts { position: fixed; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
 .toast { background:#0e1318; border:1px solid var(--border); color: var(--text); padding:10px 12px; border-radius:12px; }
+
+.live-controls { margin-left:auto; display:flex; align-items:center; gap:8px; }
+.range-chips { margin-left:auto; display:flex; gap:8px; }
+.chip { background:transparent; border:1px solid var(--border); color:var(--text); padding:6px 10px; border-radius:999px; cursor:pointer; }
+.chip.selected { border-color: var(--teal); box-shadow: 0 0 0 1px var(--teal) inset; color:#9fe5db; }
 
 @media (max-width: 900px) {
   .grid { grid-template-columns: 1fr; }

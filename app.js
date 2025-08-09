@@ -1,10 +1,11 @@
-/* Mr. Teals Phase 1 — Manual Trading (Fake Money)
+/* Mr. Teals Phase 1.1 — Manual Trading (Fake Money, Live Prices, Equity Chart)
    Smoke Test:
-   1) Load page → prices render within ~2s, no flicker; Equity/Cash/Positions all $0.00
-   2) Add Starting Balance $10,000 → Cash=10k, Equity=10k, Positions=$0
-   3) BUY 1 ETH → Trade row appears, Cash & Positions update. If cost > cash → blocked
+   1) Load → prices render within ~2s, no flicker; Equity/Cash/Positions $0.00
+   2) Select $10k, then click Add → Cash=10k, Equity=10k, Positions=$0
+   3) BUY 1 ETH → Trade row appears; snapshot updates; equity moves with price
    4) SELL more than you hold → blocked with error
-   5) Reset → everything back to zero, prices still live
+   5) Switch Refresh: Fast/Normal/Pause works; chart updates live
+   6) Reset → everything back to zero, prices still live
 */
 (() => {
   // ---------- Symbols & Coingecko mapping ----------
@@ -20,18 +21,17 @@
   // ---------- Elements ----------
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
-
   const el = {
     equity: $("#equityVal"),
     cash: $("#cashVal"),
     positions: $("#positionsVal"),
     pricesList: $("#pricesList"),
     priceStatus: $("#priceStatus"),
-
+    lastUpdated: $("#lastUpdated"),
+    refreshRate: $("#refreshRate"),
     addBtns: $$(".btn.add"),
     customAdd: $("#customAdd"),
-    addCustom: $("#addCustomBtn"),
-
+    addApply: $("#addApplyBtn"),
     tradeForm: $("#tradeForm"),
     tSymbol: $("#tradeSymbol"),
     tSide: $("#tradeSide"),
@@ -39,25 +39,15 @@
     estPrice: $("#estPrice"),
     estCost: $("#estCost"),
     tradeError: $("#tradeError"),
-
     tradeTable: $("#tradeTable"),
     reset: $("#resetBtn"),
     toastHost: $("#toastHost"),
   };
 
   // ---------- Local state (persisted) ----------
-  const LS_KEY = "mrteals.state.v1";
-  let state = {
-    cash: 0,
-    positions: {}, // symbol -> qty
-    trades: [],    // [{time,symbol,side,qty,price,total}]
-  };
-  function loadState() {
-    try {
-      const raw = localStorage.getItem(LS_KEY);
-      if (raw) state = JSON.parse(raw);
-    } catch {}
-  }
+  const LS_KEY = "mrteals.state.v1.1";
+  let state = { cash: 0, positions: {}, trades: [] };
+  function loadState() { try { const raw = localStorage.getItem(LS_KEY); if (raw) state = JSON.parse(raw); } catch {} }
   function saveState() { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
 
   // volatile prices cache
@@ -69,25 +59,19 @@
     const sign = Number(n) < 0 ? "-" : "";
     return `${sign}$${v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2})}`;
   }
-  function nowISO() {
-    const d = new Date();
-    return d.toLocaleTimeString();
-  }
-  function toast(msg) {
-    const t = document.createElement("div");
-    t.className = "toast";
-    t.textContent = msg;
-    el.toastHost.appendChild(t);
-    setTimeout(() => t.remove(), 2500);
-  }
+  function nowTime() { return new Date().toLocaleTimeString(); }
+  function toast(msg) { const t=document.createElement("div"); t.className="toast"; t.textContent=msg; el.toastHost.appendChild(t); setTimeout(()=>t.remove(), 2500); }
 
-  function renderSnapshot() {
-    // compute positions value from latest prices
-    let posVal = 0;
+  function computePositionsValue() {
+    let val = 0;
     for (const [sym, qty] of Object.entries(state.positions)) {
       const p = prices.get(sym)?.price;
-      if (p) posVal += qty * p;
+      if (p) val += qty * p;
     }
+    return val;
+  }
+  function renderSnapshot() {
+    const posVal = computePositionsValue();
     el.cash.textContent = fmtUSD(state.cash);
     el.positions.textContent = fmtUSD(posVal);
     el.equity.textContent = fmtUSD(state.cash + posVal);
@@ -102,7 +86,6 @@
       row.innerHTML = `
         <div class="sym">${sym}</div>
         <div class="val ${p?.stale ? "stale":""}">${val}</div>
-        <div class="muted">${p?.ts ? new Date(p.ts).toLocaleTimeString() : ""}</div>
       `;
       el.pricesList.appendChild(row);
     });
@@ -112,7 +95,7 @@
     const ids = Object.values(CG_IDS).join(",");
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd`;
     try {
-      const res = await fetch(url);
+      const res = await fetch(url, { cache: "no-store" });
       const data = await res.json();
       for (const sym of SYMBOLS) {
         const id = CG_IDS[sym];
@@ -120,37 +103,33 @@
         if (typeof price === "number") {
           prices.set(sym, { price, ts: Date.now(), stale: false });
         } else {
-          // keep old, mark stale
           const prev = prices.get(sym) || {};
           prices.set(sym, { ...prev, stale: true });
         }
       }
       el.priceStatus.textContent = "Live";
+      el.lastUpdated.textContent = `Updated: ${nowTime()}`;
       renderPrices();
       renderSnapshot();
+      recordEquityPoint();
+      renderChart();
       updateEstimate();
     } catch (e) {
-      // mark all stale
       for (const sym of SYMBOLS) {
         const prev = prices.get(sym) || {};
         prices.set(sym, { ...prev, stale: true });
       }
       el.priceStatus.textContent = "Stale";
-      renderPrices();
     }
   }
 
-  function getPrice(sym) {
-    return prices.get(sym)?.price ?? null;
-  }
-
+  function getPrice(sym) { return prices.get(sym)?.price ?? null; }
   function updateEstimate() {
     const sym = (el.tSymbol.value || "").toUpperCase().trim();
     const qty = Number(el.tQty.value);
     const p = getPrice(sym);
     el.estPrice.textContent = p ? fmtUSD(p) : "—";
-    if (p && qty > 0) el.estCost.textContent = fmtUSD(p * qty);
-    else el.estCost.textContent = "—";
+    el.estCost.textContent = (p && qty > 0) ? fmtUSD(p * qty) : "—";
   }
 
   // ---------- Trading ----------
@@ -160,39 +139,24 @@
     if (cost > state.cash + 1e-9) return { ok:false, reason:`Not enough cash: need ${fmtUSD(cost)}, have ${fmtUSD(state.cash)}`};
     return { ok:true };
   }
-
   function canSell(sym, qty) {
     const held = state.positions[sym] || 0;
     if (qty > held + 1e-12) return { ok:false, reason:`Not enough holdings: have ${held}` };
     return { ok:true };
   }
-
   function executeTrade(sym, side, qty) {
-    const p = getPrice(sym);
-    if (!p) throw new Error("Price unavailable");
-
+    const p = getPrice(sym); if (!p) throw new Error("Price unavailable");
     if (side === "BUY") {
-      const { ok, reason } = canBuy(sym, qty);
-      if (!ok) throw new Error(reason);
+      const v = canBuy(sym, qty); if (!v.ok) throw new Error(v.reason);
       state.cash -= p * qty;
       state.positions[sym] = (state.positions[sym] || 0) + qty;
     } else {
-      const { ok, reason } = canSell(sym, qty);
-      if (!ok) throw new Error(reason);
+      const v = canSell(sym, qty); if (!v.ok) throw new Error(v.reason);
       state.cash += p * qty;
       state.positions[sym] = (state.positions[sym] || 0) - qty;
       if (state.positions[sym] < 1e-12) delete state.positions[sym];
     }
-
-    const trade = {
-      time: nowISO(),
-      symbol: sym,
-      side,
-      qty: Number(qty),
-      price: p,
-      total: p * qty
-    };
-    state.trades.unshift(trade);
+    state.trades.unshift({ time: nowTime(), symbol:sym, side, qty:Number(qty), price:p, total:p*qty });
     saveState();
     renderSnapshot();
     renderTrades();
@@ -215,26 +179,88 @@
     });
   }
 
-  // ---------- Events ----------
-  el.addBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const amt = Number(btn.dataset.add);
-      if (amt > 0) {
-        state.cash += amt;
-        saveState();
-        renderSnapshot();
-        toast(`Added ${fmtUSD(amt)} starting balance`);
+  // ---------- Refresh control & Chart ----------
+  let pollTimer = null;
+  let pollMs = 2000;
+  const equityHistory = []; // [{t:number, v:number}]
+  let chart, currentRange = "1D";
+
+  function recordEquityPoint() {
+    const eq = state.cash + computePositionsValue();
+    equityHistory.push({ t: Date.now(), v: eq });
+    // cap history to last ~7 days to avoid unbounded growth
+    const cutoff = Date.now() - 7*24*60*60*1000;
+    while (equityHistory.length && equityHistory[0].t < cutoff) equityHistory.shift();
+  }
+  function startPoll() {
+    if (pollTimer) clearInterval(pollTimer);
+    if (pollMs > 0) {
+      pollTimer = setInterval(fetchCoingecko, pollMs);
+    }
+  }
+  el.refreshRate.addEventListener("change", () => {
+    pollMs = Number(el.refreshRate.value);
+    startPoll();
+    if (pollMs > 0) fetchCoingecko(); // immediate tick on change
+  });
+
+  function buildChart() {
+    const ctx = document.getElementById("equityChart").getContext("2d");
+    chart = new Chart(ctx, {
+      type: "line",
+      data: { labels: [], datasets: [{ label:"Equity", data: [], borderWidth:2, pointRadius:0, tension:0.25 }] },
+      options: {
+        animation: false, responsive: true,
+        scales: {
+          x: { ticks: { color: "#9db2b2" }, grid: { color: "#24303a" } },
+          y: { ticks: { color: "#9db2b2" }, grid: { color: "#24303a" } },
+        },
+        plugins: { legend: { display:false } }
       }
     });
+  }
+  function renderChart() {
+    if (!chart) return;
+    const now = Date.now();
+    const win = { "1D":86400000, "1W":604800000, "1M":2592000000, "1Y":31536000000, "ALL": Infinity }[currentRange];
+    const slice = equityHistory.filter(p => currentRange === "ALL" || (now - p.t) <= win);
+    chart.data.labels = slice.map(p => new Date(p.t).toLocaleTimeString());
+    chart.data.datasets[0].data = slice.map(p => p.v);
+    chart.update();
+  }
+  document.addEventListener("click", (e) => {
+    const btn = e.target.closest(".chip");
+    if (!btn) return;
+    document.querySelectorAll(".chip").forEach(c => c.classList.remove("selected"));
+    btn.classList.add("selected");
+    currentRange = btn.dataset.range;
+    renderChart();
   });
-  el.addCustom.addEventListener("click", () => {
-    const amt = Number(el.customAdd.value);
-    if (amt > 0) {
+
+  // ---------- Events ----------
+  let selectedAdd = null;
+  el.addBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedAdd = Number(btn.dataset.add);
+      el.addBtns.forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+    });
+  });
+  el.addApply.addEventListener("click", () => {
+    let amt = selectedAdd;
+    const custom = Number(el.customAdd.value);
+    if ((!amt || amt <= 0) && custom > 0) amt = custom;
+    if (amt && amt > 0) {
       state.cash += amt;
-      el.customAdd.value = "";
       saveState();
-      renderSnapshot();
       toast(`Added ${fmtUSD(amt)} starting balance`);
+      selectedAdd = null;
+      el.addBtns.forEach(b => b.classList.remove("selected"));
+      el.customAdd.value = "";
+      renderSnapshot();
+      // chart point after balance change
+      recordEquityPoint();
+      renderChart();
     }
   });
 
@@ -244,26 +270,20 @@
 
   el.tradeForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    el.tradeError.hidden = true;
+    el.tradeError.hidden = true
+  });
+
     const sym = (el.tSymbol.value || "").toUpperCase().trim();
     const side = el.tSide.value;
     const qty = Number(el.tQty.value);
-
-    if (!sym || !CG_IDS[sym]) {
-      el.tradeError.hidden = false;
-      el.tradeError.textContent = "Enter a valid symbol from the list.";
-      return;
-    }
-    if (!(qty > 0)) {
-      el.tradeError.hidden = false;
-      el.tradeError.textContent = "Enter a positive quantity.";
-      return;
-    }
+    if (!sym || !CG_IDS[sym]) { el.tradeError.hidden=false; el.tradeError.textContent="Enter a valid symbol from the list."; return; }
+    if (!(qty > 0)) { el.tradeError.hidden=false; el.tradeError.textContent="Enter a positive quantity."; return; }
     try {
       executeTrade(sym, side, qty);
-      // clear qty, keep symbol
       el.tQty.value = "";
       updateEstimate();
+      recordEquityPoint();
+      renderChart();
     } catch (err) {
       el.tradeError.hidden = false;
       el.tradeError.textContent = err.message || "Trade failed";
@@ -275,21 +295,28 @@
     saveState();
     renderTrades();
     renderSnapshot();
+    equityHistory.length = 0;
+    recordEquityPoint();
+    renderChart();
     toast("Simulation reset");
   });
 
   // ---------- Boot ----------
   function boot() {
     loadState();
-    // init prices map entries so UI has stable rows
     SYMBOLS.forEach(sym => prices.set(sym, { price:null, ts:null, stale:false }));
     renderPrices();
     renderTrades();
     renderSnapshot();
     updateEstimate();
-    // price poller (2s)
+    buildChart();
+    recordEquityPoint();
+    renderChart();
     fetchCoingecko();
-    setInterval(fetchCoingecko, 2000);
+    // Start poller
+    const sel = document.getElementById("refreshRate");
+    pollMs = Number(sel.value || 2000);
+    if (pollMs > 0) startPoll();
   }
   document.addEventListener("DOMContentLoaded", boot);
 })();
